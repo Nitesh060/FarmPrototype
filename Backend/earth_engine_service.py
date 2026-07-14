@@ -43,15 +43,15 @@ _init_lock = threading.Lock()
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-START_DATE = "2020-08-01"
-END_DATE = "2023-10-31"
+START_DATE = "2025-08-01"
+END_DATE = "2025-10-31"
 
 # Growing-season months (August = 8 … October = 10)
 SEASON_MONTHS = [8, 9, 10]
 
 # Default buffer radius (metres) around the queried point — keeps reducers
 # from returning null on sparse datasets.
-BUFFER_RADIUS_M = 1000
+BUFFER_RADIUS_M = 500
 
 # Maximum cloud cover percentage for Sentinel-2 scenes
 S2_MAX_CLOUD_PCT = 30
