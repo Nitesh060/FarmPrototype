@@ -107,7 +107,17 @@ def initialise_earth_engine() -> None:
         if _ee_initialised:          # double-checked locking
             return
 
-        key_path = _resolve_credentials_path()
+        credentials_json = os.getenv("GOOGLE_CREDENTIALS")
+
+        if credentials_json:
+            import tempfile
+
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmp:
+                tmp.write(credentials_json)
+                key_path = tmp.name
+        else:
+            key_path = _resolve_credentials_path()
+
         logger.info("Authenticating Earth Engine with key: %s", key_path)
 
         with open(key_path, "r", encoding="utf-8") as fh:
