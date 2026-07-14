@@ -17,7 +17,7 @@
 
 const API_BASE_URL =
     window.FARMSCORE_API_URL ||
-    "https://farmprototype-1.onrender.com";
+    "https://farmprototype-2.onrender.com";
 
 /**
  * Call the FarmScore backend to calculate an agricultural suitability score.
