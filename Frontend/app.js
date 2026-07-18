@@ -115,7 +115,41 @@ function placeMarker(lat, lng) {
     if (marker) map.removeLayer(marker);
     marker = L.marker([lat, lng], { icon: farmIcon }).addTo(map);
 }
+async function fetchLocationDetails(lat, lng) {
 
+    try {
+
+        const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`
+        );
+
+        const data = await response.json();
+
+        const addr = data.address || {};
+
+        document.getElementById("village-input").value =
+            addr.village ||
+            addr.town ||
+            addr.city ||
+            addr.hamlet ||
+            "";
+
+        document.getElementById("district-input").value =
+            addr.county ||
+            addr.state_district ||
+            "";
+
+        document.getElementById("state-input").value =
+            addr.state || "";
+
+        document.getElementById("pincode-input").value =
+            addr.postcode || "";
+
+    } catch (err) {
+        console.error("Reverse Geocoding Error:", err);
+    }
+
+}
 /* ===================================================================
    Grade Assignment
    =================================================================== */
