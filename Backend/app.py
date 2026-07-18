@@ -29,7 +29,7 @@ from flask_cors import CORS
 # ---------------------------------------------------------------------------
 from earth_engine_service import fetch_farm_data, initialise_earth_engine
 from scoring import calculate_score
-
+from crop_recommendation import recommend_crop
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -151,6 +151,15 @@ def calculate():
             temperature=satellite_data.get("temperature"),
             groundwater=satellite_data.get("groundwater"),
         )
+        crop_result = recommend_crop(
+    satellite_data.get("ndvi"),
+    satellite_data.get("ndmi"),
+    satellite_data.get("rainfall"),
+    satellite_data.get("temperature"),
+    satellite_data.get("groundwater"),
+)
+        
+        
     except Exception as exc:
         logger.exception("Scoring computation failed")
         return jsonify({
@@ -169,6 +178,7 @@ def calculate():
         "score": result["final_score"],
         "grade": result["grade"],
         "components": result["components"],
+        "recommended_crops": crop_result,
         "coordinates": {"lat": lat, "lng": lng},
         "elapsed_seconds": elapsed,
     }), 200
