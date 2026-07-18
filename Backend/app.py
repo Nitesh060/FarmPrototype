@@ -109,6 +109,7 @@ def calculate():
 
     lat = body.get("lat")
     lng = body.get("lng")
+    polygon = body.get("polygon")
 
     if lat is None or lng is None:
         return jsonify({"error": "Both 'lat' and 'lng' are required"}), 400
@@ -129,7 +130,11 @@ def calculate():
     logger.info("▶ /calculate  lat=%.5f  lng=%.5f", lat, lng)
 
     try:
-        satellite_data = fetch_farm_data(lat, lng)
+        satellite_data = fetch_farm_data(
+    lat=lat,
+    lng=lng,
+    polygon=polygon
+)
     except Exception as exc:
         logger.exception("Earth Engine fetch failed")
         return jsonify({
