@@ -17,6 +17,7 @@ href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 
     <link rel="stylesheet" href="style.css" />
 </head>
@@ -151,7 +152,14 @@ href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css
 </div>
 
         <!-- NEW BUTTON -->
-
+<div class="input-group" style="margin-bottom:12px;">
+    <label>Farm Area</label>
+    <input
+        type="text"
+        id="farm-area"
+        readonly
+        placeholder="Draw polygon to calculate area">
+</div>
         <button
             class="btn-primary"
             id="location-btn"
