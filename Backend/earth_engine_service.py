@@ -25,7 +25,7 @@ import logging
 import os
 import threading
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import ee
 
@@ -44,7 +44,7 @@ _init_lock = threading.Lock()
 # Constants
 # ---------------------------------------------------------------------------
 START_DATE = "2020-08-01"
-END_DATE = "2025-10-31"
+END_DATE = "2023-10-31"
 
 # Growing-season months (August = 8 … October = 10)
 SEASON_MONTHS = [8, 9, 10]
@@ -57,8 +57,8 @@ BUFFER_RADIUS_M = 500
 S2_MAX_CLOUD_PCT = 30
 
 # In-memory cache for coordinates to avoid redundant Earth Engine calls.
-# Cache key is rounded to 5 decimal places: (round(lat, 5), round(lng, 5))
-_coord_cache: Dict[tuple[float, float], Dict[str, Optional[float]]] = {}
+# Cache key is either a rounded (lat, lng) tuple or a ("polygon", hash) tuple.
+_coord_cache: Dict[Tuple[Any, Any], Dict[str, Optional[float]]] = {}
 _cache_lock = threading.Lock()
 
 
@@ -112,7 +112,9 @@ def initialise_earth_engine() -> None:
         if credentials_json:
             import tempfile
 
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmp:
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".json", delete=False, encoding="utf-8"
+            ) as tmp:
                 tmp.write(credentials_json)
                 key_path = tmp.name
         else:
@@ -145,18 +147,13 @@ def _point_geometry(lat: float, lng: float) -> ee.Geometry.Point:
 def _buffered_region(lat: float, lng: float, radius_m: int = BUFFER_RADIUS_M) -> ee.Geometry:
     """Return a circular buffer around the point to guard against sparse pixels."""
     return _point_geometry(lat, lng).buffer(radius_m)
-    def _get_region(lat, lng, polygon=None):
-    """
-    Return Polygon geometry if available,
-    otherwise return buffered point.
-    """
 
+
+def _get_region(lat: float, lng: float, polygon: Optional[dict] = None) -> ee.Geometry:
+    """Return a Polygon geometry if one was supplied, otherwise a buffered point."""
     if polygon:
-
         coords = polygon["geometry"]["coordinates"][0]
-
         gee_coords = [[c[0], c[1]] for c in coords]
-
         return ee.Geometry.Polygon([gee_coords])
 
     return _buffered_region(lat, lng)
@@ -193,7 +190,9 @@ def _reduce_mean(image: ee.Image, region: ee.Geometry, scale: int) -> Optional[f
 # Dataset fetch functions
 # ---------------------------------------------------------------------------
 
-def _fetch_s2_indices(lat: float, lng: float, polygon=None)-> tuple[Optional[float], Optional[float]]:
+def _fetch_s2_indices(
+    lat: float, lng: float, polygon: Optional[dict] = None
+) -> Tuple[Optional[float], Optional[float]]:
     """Mean NDVI and NDMI from Sentinel-2 Surface Reflectance (Harmonized) in a single query.
 
     NDVI = (B8 – B4) / (B8 + B4)
@@ -233,7 +232,7 @@ def _fetch_s2_indices(lat: float, lng: float, polygon=None)-> tuple[Optional[flo
     return ndvi_val, ndmi_val
 
 
-def _fetch_rainfall(lat: float, lng: float, polygon=None) -> Optional[float]:
+def _fetch_rainfall(lat: float, lng: float, polygon: Optional[dict] = None) -> Optional[float]:
     """Mean daily precipitation (mm/day) from CHIRPS Daily dataset.
 
     Returns the temporal mean of daily precipitation values over the
@@ -252,7 +251,7 @@ def _fetch_rainfall(lat: float, lng: float, polygon=None) -> Optional[float]:
     return _reduce_mean(mean_precip, region, scale=5566)
 
 
-def _fetch_temperature(lat: float, lng: float, polygon=None) -> Optional[float]:
+def _fetch_temperature(lat: float, lng: float, polygon: Optional[dict] = None) -> Optional[float]:
     """Mean daytime Land Surface Temperature (°C) from MODIS/061/MOD11A1.
 
     The raw band stores LST in Kelvin × 0.02.  We apply the scale factor
@@ -275,7 +274,7 @@ def _fetch_temperature(lat: float, lng: float, polygon=None) -> Optional[float]:
     return _reduce_mean(mean_lst, region, scale=1000)
 
 
-def _fetch_groundwater(lat: float, lng: float, polygon=None) -> Optional[float]:
+def _fetch_groundwater(lat: float, lng: float, polygon: Optional[dict] = None) -> Optional[float]:
     """Mean deep-layer soil moisture (kg/m²) from GLDAS Noah v2.1.
 
     Uses ``SoilMoi100_200cm_inst`` (100-200 cm layer) as a proxy for
@@ -301,7 +300,7 @@ def _fetch_groundwater(lat: float, lng: float, polygon=None) -> Optional[float]:
 def fetch_farm_data(
     lat: float,
     lng: float,
-    polygon=None
+    polygon: Optional[dict] = None,
 ) -> Dict[str, Optional[float]]:
     """Fetch all five agricultural parameters for a single coordinate.
 
@@ -311,6 +310,9 @@ def fetch_farm_data(
         Latitude in decimal degrees (−90 to 90).
     lng : float
         Longitude in decimal degrees (−180 to 180).
+    polygon : dict, optional
+        A GeoJSON-like feature with a Polygon geometry. When supplied,
+        this is used as the query region instead of a buffered point.
 
     Returns
     -------
@@ -323,8 +325,6 @@ def fetch_farm_data(
     ------
     ValueError
         If the coordinates are out of range.
-    RuntimeError
-        If Earth Engine has not been initialised.
     """
     # ---- Validate inputs ----
     if not (-90 <= lat <= 90):
@@ -332,11 +332,12 @@ def fetch_farm_data(
     if not (-180 <= lng <= 180):
         raise ValueError(f"Longitude out of range: {lng}")
 
-    # ---- Check Cache ----
+    # ---- Check cache ----
     if polygon:
-    cache_key = ("polygon", str(polygon)[:200])
-else:
-    cache_key = (round(lat, 5), round(lng, 5))
+        cache_key: Tuple[Any, Any] = ("polygon", str(polygon)[:200])
+    else:
+        cache_key = (round(lat, 5), round(lng, 5))
+
     with _cache_lock:
         if cache_key in _coord_cache:
             logger.info("Cache hit for coordinates: %s -> %s", (lat, lng), cache_key)
@@ -347,9 +348,9 @@ else:
 
     # ---- Fetch each parameter ----
     if polygon:
-    logger.info("Fetching Earth Engine data for Polygon")
-else:
-    logger.info("Fetching Earth Engine data for (%.5f, %.5f) …", lat, lng)
+        logger.info("Fetching Earth Engine data for polygon region")
+    else:
+        logger.info("Fetching Earth Engine data for (%.5f, %.5f) …", lat, lng)
 
     ndvi, ndmi = _fetch_s2_indices(lat, lng, polygon)
     logger.debug("  NDVI:         %s", ndvi)
