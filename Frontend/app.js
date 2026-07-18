@@ -267,7 +267,14 @@ const PARAM_COLORS = ["#2d6a4f", "#1a7a3c", "#0f6e56", "#186e8f", "#5a3e8b"];
 const WEIGHT_COLORS = ["#2d6a4f", "#1e8449", "#0f6e56", "#1a5276", "#6c3483"];
 
 function renderResult(data) {
-    const { score, grade, components, coordinates, elapsed_seconds } = data;
+   const {
+    score,
+    grade,
+    components,
+    coordinates,
+    elapsed_seconds,
+    recommended_crops
+} = data;
 
     // ---- Score ring ----
     document.getElementById("final-score").textContent = score;
@@ -328,6 +335,32 @@ function renderResult(data) {
                 <span class="w-val">${contribution}</span>
             </div>`;
     }).join("");
+
+   // ---- Crop Recommendation ----
+
+if (recommended_crops) {
+
+    document.getElementById("crop-card").style.display = "block";
+
+    let html = `
+        <div class="param-card">
+
+            <h4>🥇 ${recommended_crops.primary.crop}</h4>
+
+            <p>Suitability Score : ${recommended_crops.primary.score}%</p>
+
+            <hr>
+
+            <h4>🥈 ${recommended_crops.secondary.crop}</h4>
+
+            <p>Suitability Score : ${recommended_crops.secondary.score}%</p>
+
+        </div>
+    `;
+
+    document.getElementById("crop-result").innerHTML = html;
+
+}
 
     // ---- Show panel ----
     document.getElementById("result-panel").style.display = "block";
