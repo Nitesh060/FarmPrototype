@@ -75,6 +75,23 @@ L.control.layers(
         "Satellite": satelliteLayer,
     }
 ).addTo(map);
+// Search Control
+L.Control.geocoder({
+    defaultMarkGeocode: false
+})
+.on("markgeocode", function (e) {
+
+    const center = e.geocode.center;
+
+    map.setView(center, 16);
+
+    placeMarker(center.lat, center.lng);
+
+    document.getElementById("lat-input").value = center.lat.toFixed(6);
+    document.getElementById("lng-input").value = center.lng.toFixed(6);
+
+})
+.addTo(map);
 
 const farmIcon = L.divIcon({
     className: "",
