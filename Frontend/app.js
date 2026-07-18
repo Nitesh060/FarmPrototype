@@ -49,10 +49,32 @@ let marker = null;
 
 const map = L.map("map", { zoomControl: true }).setView([20.5, 78.9], 5);
 
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: "© OpenStreetMap contributors",
-    maxZoom: 18,
-}).addTo(map);
+const streetLayer = L.tileLayer(
+    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    {
+        attribution: "© OpenStreetMap contributors",
+        maxZoom: 19,
+    }
+);
+
+const satelliteLayer = L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    {
+        attribution: "Tiles © Esri",
+        maxZoom: 19,
+    }
+);
+
+// Default layer
+satelliteLayer.addTo(map);
+
+// Layer switcher
+L.control.layers(
+    {
+        "Road Map": streetLayer,
+        "Satellite": satelliteLayer,
+    }
+).addTo(map);
 
 const farmIcon = L.divIcon({
     className: "",
