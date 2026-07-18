@@ -86,6 +86,7 @@ L.Control.geocoder({
     map.setView(center, 16);
 
     placeMarker(center.lat, center.lng);
+   fetchLocationDetails(center.lat, center.lng);
 
     document.getElementById("lat-input").value = center.lat.toFixed(6);
     document.getElementById("lng-input").value = center.lng.toFixed(6);
@@ -109,6 +110,7 @@ map.on("click", function (e) {
     document.getElementById("lat-input").value = lat.toFixed(5);
     document.getElementById("lng-input").value = lng.toFixed(5);
     placeMarker(lat, lng);
+   fetchLocationDetails(lat, lng);
 });
 
 function placeMarker(lat, lng) {
