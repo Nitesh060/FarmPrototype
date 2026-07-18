@@ -93,7 +93,44 @@ L.Control.geocoder({
 
 })
 .addTo(map);
+/* ==========================================================
+   Polygon Layer
+   ========================================================== */
 
+let drawnItems = new L.FeatureGroup();
+map.addLayer(drawnItems);
+
+let farmPolygon = null;
+
+const drawControl = new L.Control.Draw({
+
+    edit: {
+        featureGroup: drawnItems
+    },
+
+    draw: {
+
+        polygon: {
+            allowIntersection: false,
+            showArea: true,
+            shapeOptions: {
+                color: "#2d6a4f",
+                weight: 3
+            }
+        },
+
+        rectangle: true,
+
+        polyline: false,
+        circle: false,
+        circlemarker: false,
+        marker: false
+
+    }
+
+});
+
+map.addControl(drawControl);
 const farmIcon = L.divIcon({
     className: "",
     html: `<div style="width:18px;height:18px;background:#2d6a4f;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.3)"></div>`,
@@ -114,6 +151,25 @@ map.on("click", function (e) {
 });
 
 function placeMarker(lat, lng) {
+   /* ==========================================================
+   Polygon Created
+   ========================================================== */
+
+map.on(L.Draw.Event.CREATED, function (e) {
+
+    drawnItems.clearLayers();
+
+    const layer = e.layer;
+
+    drawnItems.addLayer(layer);
+
+    farmPolygon = layer.toGeoJSON();
+
+    console.log("Polygon");
+
+    console.log(farmPolygon);
+
+});
     if (marker) map.removeLayer(marker);
     marker = L.marker([lat, lng], { icon: farmIcon }).addTo(map);
 }
