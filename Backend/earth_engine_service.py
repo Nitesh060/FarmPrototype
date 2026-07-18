@@ -145,6 +145,21 @@ def _point_geometry(lat: float, lng: float) -> ee.Geometry.Point:
 def _buffered_region(lat: float, lng: float, radius_m: int = BUFFER_RADIUS_M) -> ee.Geometry:
     """Return a circular buffer around the point to guard against sparse pixels."""
     return _point_geometry(lat, lng).buffer(radius_m)
+    def _get_region(lat, lng, polygon=None):
+    """
+    Return Polygon geometry if available,
+    otherwise return buffered point.
+    """
+
+    if polygon:
+
+        coords = polygon["geometry"]["coordinates"][0]
+
+        gee_coords = [[c[0], c[1]] for c in coords]
+
+        return ee.Geometry.Polygon([gee_coords])
+
+    return _buffered_region(lat, lng)
 
 
 def _filter_growing_season(collection: ee.ImageCollection) -> ee.ImageCollection:
@@ -178,13 +193,13 @@ def _reduce_mean(image: ee.Image, region: ee.Geometry, scale: int) -> Optional[f
 # Dataset fetch functions
 # ---------------------------------------------------------------------------
 
-def _fetch_s2_indices(lat: float, lng: float) -> tuple[Optional[float], Optional[float]]:
+def _fetch_s2_indices(lat: float, lng: float, polygon=None)-> tuple[Optional[float], Optional[float]]:
     """Mean NDVI and NDMI from Sentinel-2 Surface Reflectance (Harmonized) in a single query.
 
     NDVI = (B8 – B4) / (B8 + B4)
     NDMI = (B8 – B11) / (B8 + B11)
     """
-    region = _buffered_region(lat, lng)
+    region = _get_region(lat, lng, polygon)
     s2 = (
         ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
         .filterDate(START_DATE, END_DATE)
@@ -218,13 +233,13 @@ def _fetch_s2_indices(lat: float, lng: float) -> tuple[Optional[float], Optional
     return ndvi_val, ndmi_val
 
 
-def _fetch_rainfall(lat: float, lng: float) -> Optional[float]:
+def _fetch_rainfall(lat: float, lng: float, polygon=None) -> Optional[float]:
     """Mean daily precipitation (mm/day) from CHIRPS Daily dataset.
 
     Returns the temporal mean of daily precipitation values over the
     growing-season windows.
     """
-    region = _buffered_region(lat, lng)
+    region = _get_region(lat, lng, polygon)
     chirps = (
         ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
         .filterDate(START_DATE, END_DATE)
@@ -237,13 +252,13 @@ def _fetch_rainfall(lat: float, lng: float) -> Optional[float]:
     return _reduce_mean(mean_precip, region, scale=5566)
 
 
-def _fetch_temperature(lat: float, lng: float) -> Optional[float]:
+def _fetch_temperature(lat: float, lng: float, polygon=None) -> Optional[float]:
     """Mean daytime Land Surface Temperature (°C) from MODIS/061/MOD11A1.
 
     The raw band stores LST in Kelvin × 0.02.  We apply the scale factor
     and convert to Celsius.
     """
-    region = _buffered_region(lat, lng)
+    region = _get_region(lat, lng, polygon)
     modis = (
         ee.ImageCollection("MODIS/061/MOD11A1")
         .filterDate(START_DATE, END_DATE)
@@ -260,13 +275,13 @@ def _fetch_temperature(lat: float, lng: float) -> Optional[float]:
     return _reduce_mean(mean_lst, region, scale=1000)
 
 
-def _fetch_groundwater(lat: float, lng: float) -> Optional[float]:
+def _fetch_groundwater(lat: float, lng: float, polygon=None) -> Optional[float]:
     """Mean deep-layer soil moisture (kg/m²) from GLDAS Noah v2.1.
 
     Uses ``SoilMoi100_200cm_inst`` (100-200 cm layer) as a proxy for
     groundwater storage.
     """
-    region = _buffered_region(lat, lng)
+    region = _get_region(lat, lng, polygon)
     gldas = (
         ee.ImageCollection("NASA/GLDAS/V021/NOAH/G025/T3H")
         .filterDate(START_DATE, END_DATE)
@@ -283,7 +298,11 @@ def _fetch_groundwater(lat: float, lng: float) -> Optional[float]:
 # Public API
 # ---------------------------------------------------------------------------
 
-def fetch_farm_data(lat: float, lng: float) -> Dict[str, Optional[float]]:
+def fetch_farm_data(
+    lat: float,
+    lng: float,
+    polygon=None
+) -> Dict[str, Optional[float]]:
     """Fetch all five agricultural parameters for a single coordinate.
 
     Parameters
@@ -314,6 +333,9 @@ def fetch_farm_data(lat: float, lng: float) -> Dict[str, Optional[float]]:
         raise ValueError(f"Longitude out of range: {lng}")
 
     # ---- Check Cache ----
+    if polygon:
+    cache_key = ("polygon", str(polygon)[:200])
+else:
     cache_key = (round(lat, 5), round(lng, 5))
     with _cache_lock:
         if cache_key in _coord_cache:
@@ -324,19 +346,22 @@ def fetch_farm_data(lat: float, lng: float) -> Dict[str, Optional[float]]:
     initialise_earth_engine()
 
     # ---- Fetch each parameter ----
+    if polygon:
+    logger.info("Fetching Earth Engine data for Polygon")
+else:
     logger.info("Fetching Earth Engine data for (%.5f, %.5f) …", lat, lng)
 
-    ndvi, ndmi = _fetch_s2_indices(lat, lng)
+    ndvi, ndmi = _fetch_s2_indices(lat, lng, polygon)
     logger.debug("  NDVI:         %s", ndvi)
     logger.debug("  NDMI:         %s", ndmi)
 
-    rainfall = _fetch_rainfall(lat, lng)
+    rainfall = _fetch_rainfall(lat, lng, polygon)
     logger.debug("  Rainfall:     %s mm/day", rainfall)
 
-    temperature = _fetch_temperature(lat, lng)
+    temperature = _fetch_temperature(lat, lng, polygon)
     logger.debug("  Temperature:  %s °C", temperature)
 
-    groundwater = _fetch_groundwater(lat, lng)
+    groundwater = _fetch_groundwater(lat, lng, polygon)
     logger.debug("  Groundwater:  %s kg/m²", groundwater)
 
     result = {
