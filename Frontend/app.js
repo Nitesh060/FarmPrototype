@@ -164,6 +164,14 @@ map.on(L.Draw.Event.CREATED, function (e) {
     drawnItems.addLayer(layer);
 
     farmPolygon = layer.toGeoJSON();
+   const areaSqM = turf.area(farmPolygon);
+
+const areaAcres = areaSqM / 4046.85642;
+
+const areaHectare = areaSqM / 10000;
+
+document.getElementById("farm-area").value =
+`${areaAcres.toFixed(2)} Acres (${areaHectare.toFixed(2)} ha)`;
 
     console.log("Polygon");
 
