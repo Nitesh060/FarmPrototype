@@ -454,6 +454,36 @@ if (recommended_crops) {
 
 }
 
+// ---- AI Land Cover (CNN) ----
+
+if (data.land_cover) {
+
+    document.getElementById("land-cover-card").style.display = "block";
+
+    const lc = data.land_cover;
+    const rows = Object.entries(lc.probabilities || {})
+        .sort((a, b) => b[1] - a[1])
+        .map(([label, pct]) => `
+            <div class="weight-row">
+                <span class="w-label">${label}</span>
+                <div class="weight-bar">
+                    <div class="weight-bar-inner" style="width:${pct}%;background:#22d3a5"></div>
+                </div>
+                <span class="w-val">${pct}%</span>
+            </div>`)
+        .join("");
+
+    document.getElementById("land-cover-result").innerHTML = `
+        <p style="margin:0 0 12px;font-size:0.86rem;font-weight:600;">
+            ${lc.label} <span style="color:var(--text-muted);font-weight:400">(${lc.confidence}% confidence)</span>
+        </p>
+        <div class="weight-bar-wrap">${rows}</div>
+    `;
+
+} else {
+    document.getElementById("land-cover-card").style.display = "none";
+}
+
     // ---- Show panel ----
    // ---- AI Summary ----
 
