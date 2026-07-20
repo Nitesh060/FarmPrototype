@@ -87,6 +87,7 @@ L.Control.geocoder({
 
     placeMarker(center.lat, center.lng);
    fetchLocationDetails(center.lat, center.lng);
+   fetchWeather(center.lat, center.lng);
 
     document.getElementById("lat-input").value = center.lat.toFixed(6);
     document.getElementById("lng-input").value = center.lng.toFixed(6);
@@ -148,6 +149,7 @@ map.on("click", function (e) {
     document.getElementById("lng-input").value = lng.toFixed(5);
     placeMarker(lat, lng);
    fetchLocationDetails(lat, lng);
+   fetchWeather(lat, lng);
 });
 
 function placeMarker(lat, lng) {
@@ -216,6 +218,95 @@ async function fetchLocationDetails(lat, lng) {
     }
 
 }
+
+/* ===================================================================
+   Weather Forecast (Open-Meteo — free, no API key required)
+   =================================================================== */
+
+const WMO_WEATHER = {
+    0:  { icon: "☀️", label: "Clear sky" },
+    1:  { icon: "🌤️", label: "Mainly clear" },
+    2:  { icon: "⛅", label: "Partly cloudy" },
+    3:  { icon: "☁️", label: "Overcast" },
+    45: { icon: "🌫️", label: "Fog" },
+    48: { icon: "🌫️", label: "Depositing fog" },
+    51: { icon: "🌦️", label: "Light drizzle" },
+    53: { icon: "🌦️", label: "Drizzle" },
+    55: { icon: "🌦️", label: "Dense drizzle" },
+    61: { icon: "🌧️", label: "Light rain" },
+    63: { icon: "🌧️", label: "Rain" },
+    65: { icon: "🌧️", label: "Heavy rain" },
+    71: { icon: "❄️", label: "Light snow" },
+    73: { icon: "❄️", label: "Snow" },
+    75: { icon: "❄️", label: "Heavy snow" },
+    80: { icon: "🌦️", label: "Rain showers" },
+    81: { icon: "🌦️", label: "Rain showers" },
+    82: { icon: "🌧️", label: "Violent showers" },
+    95: { icon: "⛈️", label: "Thunderstorm" },
+    96: { icon: "⛈️", label: "Thunderstorm, hail" },
+    99: { icon: "⛈️", label: "Thunderstorm, hail" },
+};
+
+function weatherInfo(code) {
+    return WMO_WEATHER[code] || { icon: "🌡️", label: "Unknown" };
+}
+
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+async function fetchWeather(lat, lng) {
+    const card = document.getElementById("weather-card");
+
+    try {
+        const url =
+            `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
+            `&current_weather=true` +
+            `&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_sum` +
+            `&timezone=auto`;
+
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (!data.current_weather) throw new Error("No weather data");
+
+        // ---- Current conditions ----
+        const current = data.current_weather;
+        const info = weatherInfo(current.weathercode);
+
+        document.getElementById("weather-icon").textContent = info.icon;
+        document.getElementById("weather-temp").textContent =
+            `${Math.round(current.temperature)}°C`;
+        document.getElementById("weather-desc").textContent = info.label;
+        document.getElementById("weather-wind").textContent =
+            `💨 ${Math.round(current.windspeed)} km/h`;
+
+        // ---- 5-day forecast strip ----
+        const daily = data.daily;
+        const strip = document.getElementById("weather-forecast");
+
+        strip.innerHTML = daily.time.slice(0, 5).map((dateStr, i) => {
+            const d = new Date(dateStr);
+            const dInfo = weatherInfo(daily.weathercode[i]);
+            const max = Math.round(daily.temperature_2m_max[i]);
+            const min = Math.round(daily.temperature_2m_min[i]);
+            const rain = daily.precipitation_sum[i];
+
+            return `
+                <div class="weather-day">
+                    <div class="wd-label">${i === 0 ? "Today" : DAY_NAMES[d.getDay()]}</div>
+                    <div class="wd-icon">${dInfo.icon}</div>
+                    <div class="wd-temp">${max}° <span>${min}°</span></div>
+                    ${rain > 0 ? `<div class="wd-rain">💧${rain}mm</div>` : ""}
+                </div>`;
+        }).join("");
+
+        card.style.display = "block";
+
+    } catch (err) {
+        console.error("Weather fetch error:", err);
+        card.style.display = "none";
+    }
+}
+
 /* ===================================================================
    Grade Assignment
    =================================================================== */
@@ -462,6 +553,8 @@ function getCurrentLocation() {
 
             placeMarker(lat, lng);
             map.setView([lat, lng], 15);
+            fetchLocationDetails(lat, lng);
+            fetchWeather(lat, lng);
 
             btn.disabled = false;
             btn.innerHTML = originalText;
