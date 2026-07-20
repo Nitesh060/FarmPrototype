@@ -66,10 +66,10 @@ def generate_summary(score, grade, satellite_data, crops):
 
     # Crop Recommendation
     if crops:
-        summary.append(
-            f"🌾 Recommended Crop: {crops['primary']['crop']}"
-        )
-
+        if crops and crops.get("primary"):
+    summary.append(
+        f"🌾 Recommended Crop: {crops['primary']['crop']}"
+    )
     # Final Recommendation
     if grade == "Excellent":
         summary.append(
