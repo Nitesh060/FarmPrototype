@@ -12,7 +12,7 @@ def generate_summary(score, grade, satellite_data, crops):
     summary.append(f"FarmScore: {score} ({grade})")
 
     # NDVI
-    ndvi = satellite_data.get("ndvi", 0)
+    ndvi = satellite_data.get("ndvi") or 0
 
     if ndvi >= 0.70:
         summary.append("🌱 Vegetation is very healthy.")
@@ -27,7 +27,7 @@ def generate_summary(score, grade, satellite_data, crops):
         summary.append("🌱 Vegetation is poor.")
 
     # NDMI
-    ndmi = satellite_data.get("ndmi", 0)
+    ndmi = satellite_data.get("ndmi") or 0
 
     if ndmi >= 0.20:
         summary.append("💧 Soil moisture is good.")
@@ -37,7 +37,7 @@ def generate_summary(score, grade, satellite_data, crops):
         summary.append("💧 Soil moisture is low.")
 
     # Rainfall
-    rainfall = satellite_data.get("rainfall", 0)
+    rainfall = satellite_data.get("rainfall") or 0
 
     if rainfall >= 6:
         summary.append("🌧 Rainfall is sufficient.")
@@ -47,7 +47,7 @@ def generate_summary(score, grade, satellite_data, crops):
         summary.append("🌧 Rainfall is low.")
 
     # Temperature
-    temp = satellite_data.get("temperature", 0)
+    temp = satellite_data.get("temperature") or 0
 
     if 20 <= temp <= 32:
         summary.append("🌡 Temperature is suitable for farming.")
@@ -55,7 +55,7 @@ def generate_summary(score, grade, satellite_data, crops):
         summary.append("🌡 Temperature is less suitable for most crops.")
 
     # Groundwater
-    gw = satellite_data.get("groundwater", 0)
+    gw = satellite_data.get("groundwater") or zero
 
     if gw >= 150:
         summary.append("🚰 Groundwater availability is good.")
