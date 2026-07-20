@@ -6,8 +6,8 @@ requests
 gunicorn
 
 numpy
+torch
 pandas
 scikit-learn
-joblib
 Pillow
 opencv-python-headless
