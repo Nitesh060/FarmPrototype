@@ -9,6 +9,12 @@ def recommend_crop(
     groundwater: float,
 ) -> Dict:
 
+    ndvi = ndvi or 0
+    ndmi = ndmi or 0
+    rainfall = rainfall or 0
+    temperature = temperature or 0
+    groundwater = groundwater or 0
+
     crops: List[Dict] = []
 
     # ---------------- Rice ----------------
