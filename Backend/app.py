@@ -15,9 +15,10 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
-from earth_engine_service import fetch_farm_data, initialise_earth_engine
+from earth_engine_service import fetch_farm_data, fetch_satellite_patch, initialise_earth_engine
 from scoring import calculate_score
 from crop_recommendation import recommend_crop
+from land_cover_model import classify_patch
 
 load_dotenv()
 
@@ -105,6 +106,16 @@ def calculate():
         logger.exception("Scoring computation failed")
         return jsonify({"error": "Scoring computation failed", "detail": str(exc)}), 500
 
+    # ---- CNN land-cover inference (optional — no-op until a trained
+    #      checkpoint exists at Backend/land_cover_cnn.pt) ----
+    land_cover = None
+    try:
+        patch = fetch_satellite_patch(lat=lat, lng=lng)
+        if patch is not None:
+            land_cover = classify_patch(patch)
+    except Exception:
+        logger.exception("Land-cover CNN inference skipped due to an error")
+
     elapsed = round(time.time() - t0, 2)
     logger.info("Score=%d Grade=%s elapsed=%.2fs", result["final_score"], result["grade"], elapsed)
 
@@ -113,6 +124,7 @@ def calculate():
         "grade": result["grade"],
         "components": result["components"],
         "recommended_crops": crop_result,
+        "land_cover": land_cover,
         "coordinates": {"lat": lat, "lng": lng},
         "elapsed_seconds": elapsed,
     }), 200
