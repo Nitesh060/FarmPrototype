@@ -273,7 +273,8 @@ function renderResult(data) {
     components,
     coordinates,
     elapsed_seconds,
-    recommended_crops
+    recommended_crops,
+    ai_summary
 } = data;
 
     // ---- Score ring ----
@@ -363,6 +364,18 @@ if (recommended_crops) {
 }
 
     // ---- Show panel ----
+   // ---- AI Summary ----
+
+if (ai_summary) {
+
+    document.getElementById("ai-summary-card").style.display = "block";
+
+    document.getElementById("ai-summary-result").innerHTML =
+        "<ul>" +
+        ai_summary.map(item => `<li>${item}</li>`).join("") +
+        "</ul>";
+
+}
     document.getElementById("result-panel").style.display = "block";
 }
 
