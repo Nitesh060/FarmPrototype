@@ -30,6 +30,7 @@ from flask_cors import CORS
 from earth_engine_service import fetch_farm_data, initialise_earth_engine
 from scoring import calculate_score
 from crop_recommendation import recommend_crop
+from ai_summary import generate_summary
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -158,6 +159,12 @@ def calculate():
     satellite_data.get("temperature"),
     satellite_data.get("groundwater"),
 )
+        summary = generate_summary(
+    result["final_score"],
+    result["grade"],
+    satellite_data,
+    crop_result
+)
         
         
     except Exception as exc:
@@ -179,6 +186,7 @@ def calculate():
         "grade": result["grade"],
         "components": result["components"],
         "recommended_crops": crop_result,
+        "ai_summary": summary,
         "coordinates": {"lat": lat, "lng": lng},
         "elapsed_seconds": elapsed,
     }), 200
