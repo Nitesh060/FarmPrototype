@@ -294,6 +294,63 @@ def _fetch_groundwater(lat: float, lng: float, polygon: Optional[dict] = None) -
 
 
 # ---------------------------------------------------------------------------
+# CNN image-patch fetch (for land_cover_model.py)
+# ---------------------------------------------------------------------------
+
+def fetch_satellite_patch(
+    lat: float, lng: float, patch_size_m: int = 640
+) -> Optional["Any"]:
+    """Return a (64, 64, 4) numpy array [R, G, B, NIR] reflectance patch
+    (values 0-1) centred on (lat, lng), for CNN land-cover inference.
+
+    Picks the least-cloudy Sentinel-2 scene in the configured date
+    range. Returns ``None`` if no usable scene is found for this
+    location, so callers should treat the CNN feature as optional.
+    """
+    import numpy as np
+
+    region = _buffered_region(lat, lng, radius_m=patch_size_m // 2)
+    s2 = (
+        ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+        .filterDate(START_DATE, END_DATE)
+        .filterBounds(region)
+        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", S2_MAX_CLOUD_PCT))
+        .sort("CLOUDY_PIXEL_PERCENTAGE")
+    )
+
+    image = s2.first()
+    if image is None:
+        return None
+
+    bands = image.select(["B4", "B3", "B2", "B8"])  # Red, Green, Blue, NIR
+
+    try:
+        pixels = ee.data.computePixels({
+            "expression": bands,
+            "fileFormat": "NUMPY_NDARRAY",
+            "grid": {
+                "dimensions": {"width": 64, "height": 64},
+                "affineTransform": {
+                    "scaleX": patch_size_m / 64,
+                    "scaleY": -patch_size_m / 64,
+                    "translateX": lng,
+                    "translateY": lat,
+                },
+                "crsCode": "EPSG:4326",
+            },
+        })
+    except Exception:
+        logger.exception("computePixels failed for satellite patch fetch")
+        return None
+
+    arr = np.stack(
+        [pixels[b].astype("float32") for b in ["B4", "B3", "B2", "B8"]], axis=-1
+    )
+    # Sentinel-2 SR reflectance scale factor is 10000
+    return np.clip(arr / 10000.0, 0.0, 1.0)
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
