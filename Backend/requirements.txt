@@ -1,8 +1,13 @@
-# FarmScore Backend — Production Dependencies
-
 Flask
 flask-cors
 earthengine-api
 python-dotenv
 requests
 gunicorn
+
+numpy
+pandas
+scikit-learn
+joblib
+Pillow
+opencv-python-headless
