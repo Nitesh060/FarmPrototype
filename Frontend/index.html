@@ -10,10 +10,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet"
-href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css">
-    <link rel="stylesheet"
-href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
@@ -28,12 +26,15 @@ href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css
 
     <div class="logo-mark">FS</div>
 
-    <div>
+    <div class="header-copy">
         <h1>FarmScore</h1>
         <p>Agricultural Suitability Index · Satellite-Powered</p>
     </div>
 
-    <span class="badge">2020–2023 · Aug–Oct</span>
+    <span class="badge">
+        <span class="badge-dot"></span>
+        2020–2023 · Aug–Oct
+    </span>
 
 </header>
 
@@ -43,9 +44,7 @@ href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css
 
     <div>
 
-        <div class="section-label">
-            Data Sources
-        </div>
+        <div class="section-label">Data Sources</div>
 
         <div class="sources-grid">
 
@@ -77,30 +76,21 @@ href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css
 
     <div>
 
-        <div class="section-label">
-            Location
-        </div>
+        <div class="section-label">Location</div>
+
         <div class="coord-row">
 
-    <div class="input-group">
-        <label>Start Date</label>
-        <input
-            type="date"
-            id="start-date"
-            value="2020-08-01">
-    </div>
+            <div class="input-group">
+                <label>Start Date</label>
+                <input type="date" id="start-date" value="2020-08-01">
+            </div>
 
-    <div class="input-group">
-        <label>End Date</label>
-        <input
-            type="date"
-            id="end-date"
-            value="2025-10-31">
-    </div>
+            <div class="input-group">
+                <label>End Date</label>
+                <input type="date" id="end-date" value="2025-10-31">
+            </div>
 
-</div>
-
-<br>
+        </div>
 
         <div class="coord-row">
 
@@ -128,62 +118,44 @@ href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css
 
         </div>
 
-        <p style="font-size:0.7rem;color:var(--text-muted);margin-top:6px;margin-bottom:10px;">
-            — or click anywhere on the map →
-        </p>
-        <div class="input-group" style="margin-bottom:8px;">
-    <label>Village / City</label>
-    <input type="text" id="village-input" readonly>
-</div>
+        <p class="map-hint">— or click anywhere on the map →</p>
 
-<div class="input-group" style="margin-bottom:8px;">
-    <label>District</label>
-    <input type="text" id="district-input" readonly>
-</div>
+        <div class="input-group">
+            <label>Village / City</label>
+            <input type="text" id="village-input" readonly>
+        </div>
 
-<div class="input-group" style="margin-bottom:8px;">
-    <label>State</label>
-    <input type="text" id="state-input" readonly>
-</div>
+        <div class="input-group">
+            <label>District</label>
+            <input type="text" id="district-input" readonly>
+        </div>
 
-<div class="input-group" style="margin-bottom:12px;">
-    <label>Pincode</label>
-    <input type="text" id="pincode-input" readonly>
-</div>
+        <div class="input-group">
+            <label>State</label>
+            <input type="text" id="state-input" readonly>
+        </div>
 
-        <!-- NEW BUTTON -->
-<div class="input-group" style="margin-bottom:12px;">
-    <label>Farm Area</label>
-    <input
-        type="text"
-        id="farm-area"
-        readonly
-        placeholder="Draw polygon to calculate area">
-</div>
-        <button
-            class="btn-primary"
-            id="location-btn"
-    
-            style="margin-bottom:10px;">
+        <div class="input-group">
+            <label>Pincode</label>
+            <input type="text" id="pincode-input" readonly>
+        </div>
+
+        <div class="input-group">
+            <label>Farm Area</label>
+            <input
+                type="text"
+                id="farm-area"
+                readonly
+                placeholder="Draw polygon to calculate area">
+        </div>
+
+        <button class="btn-primary" id="location-btn">
             📍 Use My Current Location
         </button>
 
-        <!-- EXISTING BUTTON -->
-
-        <button
-            class="btn-primary"
-            id="calc-btn"
-            onclick="computeScore()">
-
-            <span id="btn-text">
-                Calculate FarmScore
-            </span>
-
-            <div
-                class="spinner"
-                id="spinner">
-            </div>
-
+        <button class="btn-primary" id="calc-btn" onclick="computeScore()">
+            <span id="btn-text">Calculate FarmScore</span>
+            <div class="spinner" id="spinner"></div>
         </button>
 
     </div>
@@ -224,87 +196,41 @@ href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css
                 </svg>
 
                 <div class="score-center">
-
-                    <div class="score-number" id="final-score">
-                        —
-                    </div>
-
-                    <div class="score-label">
-                        /900
-                    </div>
-
+                    <div class="score-number" id="final-score">—</div>
+                    <div class="score-label">/900</div>
                 </div>
 
             </div>
 
-            <div
-                class="score-grade"
-                id="score-grade">
-            </div>
-
-            <div
-                class="coord-display"
-                id="coord-display">
-            </div>
+            <div class="score-grade" id="score-grade"></div>
+            <div class="coord-display" id="coord-display"></div>
 
         </div>
 
-        <div
-            class="params-grid"
-            id="params-grid">
+        <div class="params-grid" id="params-grid"></div>
+
+        <!-- AI Summary -->
+        <div id="ai-summary-card" style="display:none;">
+            <div class="section-label">🤖 AI Farm Analysis</div>
+            <div id="ai-summary-result"></div>
         </div>
+
         <!-- Crop Recommendation -->
-
-<div id="crop-card" style="display:none; margin-top:20px;">
-    <!-- AI Summary -->
-
-<div id="ai-summary-card" style="display:none; margin-top:20px;">
-
-    <div class="section-label">
-        🤖 AI Farm Analysis
-    </div>
-
-    <div id="ai-summary-result"></div>
-
-</div>
-
-    <div class="section-label">
-        🌾 Recommended Crops
-    </div>
-
-    <div id="crop-result"></div>
-
-</div>
+        <div id="crop-card" style="display:none;">
+            <div class="section-label">🌾 Recommended Crops</div>
+            <div id="crop-result"></div>
+        </div>
 
         <div style="margin-top:1rem;">
-
-            <div class="section-label">
-                Weighted Contributions
-            </div>
-
-            <div
-                class="weight-bar-wrap"
-                id="weight-bars">
-            </div>
-
+            <div class="section-label">Weighted Contributions</div>
+            <div class="weight-bar-wrap" id="weight-bars"></div>
         </div>
 
         <div class="methodology-note">
-
             <strong>Formula:</strong>
-
-            WeightedAvg =
-            (25×GW +
-            25×NDVI +
-            20×NDMI +
-            10×RainfallScore +
-            20×TempScore) /100
-
+            WeightedAvg = (25×GW + 25×NDVI + 20×NDMI + 10×RainfallScore + 20×TempScore) /100
             <br>
-
-            FinalScore =
-            round(WeightedAvg) +150
-
+            FinalScore = round(WeightedAvg) +150
         </div>
 
     </div>
@@ -312,13 +238,8 @@ href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css
 </div>
 
 <div class="map-panel">
-
-    <div class="map-tip">
-        Click any location to assess farmland suitability
-    </div>
-
+    <div class="map-tip">Click any location to assess farmland suitability</div>
     <div id="map"></div>
-
 </div>
 
 </main>
