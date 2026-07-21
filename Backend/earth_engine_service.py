@@ -294,60 +294,76 @@ def _fetch_groundwater(lat: float, lng: float, polygon: Optional[dict] = None) -
 
 
 # ---------------------------------------------------------------------------
-# CNN image-patch fetch (for land_cover_model.py)
+# Satellite metadata + historical trend
 # ---------------------------------------------------------------------------
 
-def fetch_satellite_patch(
-    lat: float, lng: float, patch_size_m: int = 640
-) -> Optional["Any"]:
-    """Return a (64, 64, 4) numpy array [R, G, B, NIR] reflectance patch
-    (values 0-1) centred on (lat, lng), for CNN land-cover inference.
-
-    Picks the least-cloudy Sentinel-2 scene in the configured date
-    range. Returns ``None`` if no usable scene is found for this
-    location, so callers should treat the CNN feature as optional.
+def _fetch_s2_meta(
+    lat: float, lng: float, polygon: Optional[dict] = None
+) -> Dict[str, Any]:
+    """Real metadata about the Sentinel-2 scenes used in the composite:
+    how many scenes went in, their mean cloud cover, and the most
+    recent scene date. Not a "live" single image — this dataset is a
+    multi-year growing-season composite (see START_DATE/END_DATE).
     """
-    import numpy as np
-
-    region = _buffered_region(lat, lng, radius_m=patch_size_m // 2)
+    region = _get_region(lat, lng, polygon)
     s2 = (
         ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
         .filterDate(START_DATE, END_DATE)
         .filterBounds(region)
         .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", S2_MAX_CLOUD_PCT))
-        .sort("CLOUDY_PIXEL_PERCENTAGE")
     )
+    s2 = _filter_growing_season(s2)
 
-    image = s2.first()
-    if image is None:
-        return None
+    count = s2.size().getInfo()
+    if not count:
+        return {"scene_count": 0, "mean_cloud_cover": None, "latest_scene_date": None}
 
-    bands = image.select(["B4", "B3", "B2", "B8"])  # Red, Green, Blue, NIR
+    mean_cloud = s2.aggregate_mean("CLOUDY_PIXEL_PERCENTAGE").getInfo()
+    latest_ts = s2.aggregate_max("system:time_start").getInfo()
 
-    try:
-        pixels = ee.data.computePixels({
-            "expression": bands,
-            "fileFormat": "NUMPY_NDARRAY",
-            "grid": {
-                "dimensions": {"width": 64, "height": 64},
-                "affineTransform": {
-                    "scaleX": patch_size_m / 64,
-                    "scaleY": -patch_size_m / 64,
-                    "translateX": lng,
-                    "translateY": lat,
-                },
-                "crsCode": "EPSG:4326",
-            },
-        })
-    except Exception:
-        logger.exception("computePixels failed for satellite patch fetch")
-        return None
+    latest_date = None
+    if latest_ts:
+        from datetime import datetime, timezone
+        latest_date = datetime.fromtimestamp(
+            latest_ts / 1000, tz=timezone.utc
+        ).strftime("%Y-%m-%d")
 
-    arr = np.stack(
-        [pixels[b].astype("float32") for b in ["B4", "B3", "B2", "B8"]], axis=-1
-    )
-    # Sentinel-2 SR reflectance scale factor is 10000
-    return np.clip(arr / 10000.0, 0.0, 1.0)
+    return {
+        "scene_count": int(count),
+        "mean_cloud_cover": round(mean_cloud, 1) if mean_cloud is not None else None,
+        "latest_scene_date": latest_date,
+    }
+
+
+def _fetch_ndvi_trend(
+    lat: float,
+    lng: float,
+    polygon: Optional[dict] = None,
+    years: Tuple[int, ...] = (2020, 2021, 2022, 2023),
+) -> list:
+    """Mean growing-season NDVI per year — real per-year composites from
+    the same Sentinel-2 collection, not a fabricated series.
+    """
+    region = _get_region(lat, lng, polygon)
+    trend = []
+
+    for year in years:
+        s2_year = (
+            ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+            .filterDate(f"{year}-08-01", f"{year}-10-31")
+            .filterBounds(region)
+            .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", S2_MAX_CLOUD_PCT))
+        )
+        ndvi_img = (
+            s2_year
+            .map(lambda img: img.normalizedDifference(["B8", "B4"]).rename("NDVI"))
+            .select("NDVI")
+            .mean()
+        )
+        val = _reduce_mean(ndvi_img, region, scale=10)
+        trend.append({"year": year, "ndvi": round(val, 4) if val is not None else None})
+
+    return trend
 
 
 # ---------------------------------------------------------------------------
@@ -422,12 +438,20 @@ def fetch_farm_data(
     groundwater = _fetch_groundwater(lat, lng, polygon)
     logger.debug("  Groundwater:  %s kg/m²", groundwater)
 
+    satellite_meta = _fetch_s2_meta(lat, lng, polygon)
+    logger.debug("  Satellite meta: %s", satellite_meta)
+
+    ndvi_trend = _fetch_ndvi_trend(lat, lng, polygon)
+    logger.debug("  NDVI trend: %s", ndvi_trend)
+
     result = {
         "ndvi": round(ndvi, 6) if ndvi is not None else None,
         "ndmi": round(ndmi, 6) if ndmi is not None else None,
         "rainfall": round(rainfall, 4) if rainfall is not None else None,
         "temperature": round(temperature, 4) if temperature is not None else None,
         "groundwater": round(groundwater, 4) if groundwater is not None else None,
+        "satellite_meta": satellite_meta,
+        "ndvi_trend": ndvi_trend,
     }
 
     with _cache_lock:
