@@ -79,40 +79,74 @@
         <!-- Info strip -->
         <div class="info-strip">
 
-            <div class="info-card" id="sat-status-card" style="display:none;">
+            <div class="info-card" id="sat-status-card">
                 <div class="info-card-title">🛰️ Satellite Status</div>
                 <div class="info-card-main">Sentinel-2</div>
-                <div class="info-card-line" id="sat-status-scenes">—</div>
+                <div class="info-card-line" id="sat-status-scenes">Select a location</div>
                 <div class="info-card-line" id="sat-status-cloud">—</div>
                 <div class="info-card-line muted" id="sat-status-freshness">—</div>
             </div>
 
-            <div class="info-card" id="selected-location-card" style="display:none;">
-                <div class="info-card-title">📍 Selected Location</div>
-                <div class="info-card-main" id="selected-location-coords">—</div>
-                <div class="info-card-line" id="selected-location-place">—</div>
+            <div class="info-card score-info-card">
+                <div class="info-card-title">🌾 Farm Score</div>
+                <div class="mini-score-row">
+                    <div class="mini-score-ring">
+                        <svg viewBox="0 0 130 130">
+                            <circle cx="65" cy="65" r="54" fill="none" stroke="#22303c" stroke-width="14"/>
+                            <circle
+                                cx="65" cy="65" r="54" fill="none"
+                                stroke="#34d399" stroke-width="14"
+                                stroke-linecap="round"
+                                stroke-dasharray="339.3"
+                                stroke-dashoffset="339.3"
+                                id="ring-arc"
+                                transform="rotate(-90 65 65)"/>
+                        </svg>
+                        <div class="mini-score-center">
+                            <span id="final-score">—</span>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="score-grade" id="score-grade">—</div>
+                        <div class="coord-display" id="coord-display">/900</div>
+                    </div>
+                </div>
             </div>
 
-            <div class="info-card weather-info-card" id="weather-card" style="display:none;">
+            <div class="info-card" id="selected-location-card">
+                <div class="info-card-title">📍 Location</div>
+                <div class="info-card-main" id="selected-location-coords">Not selected</div>
+                <div class="info-card-line" id="selected-location-place">Click the map or search above</div>
+            </div>
+
+            <div class="info-card weather-info-card" id="weather-card">
                 <div class="info-card-title">🌦 Weather Today</div>
                 <div class="weather-current">
-                    <div class="weather-icon" id="weather-icon">☀️</div>
+                    <div class="weather-icon" id="weather-icon">—</div>
                     <div>
                         <div class="weather-current-temp" id="weather-temp">—°C</div>
                         <div class="weather-current-desc" id="weather-desc">—</div>
                     </div>
                     <div class="weather-wind" id="weather-wind"></div>
                 </div>
-                <div class="weather-forecast-strip" id="weather-forecast"></div>
             </div>
 
         </div>
 
-        <!-- Main dashboard grid -->
+        <!-- Main dashboard row: map+breakdown (left) / nearby+loan (right) -->
         <div class="dashboard-grid">
 
             <!-- Map column -->
             <div class="map-column">
+
+                <div class="map-tabs">
+                    <button class="map-tab active" data-tab="view">Map View</button>
+                    <button class="map-tab" data-tab="ndvi">NDVI</button>
+                    <button class="map-tab" data-tab="ndmi">Soil Moisture</button>
+                    <button class="map-tab" data-tab="rainfall">Rainfall</button>
+                    <button class="map-tab" data-tab="groundwater">Groundwater</button>
+                    <button class="map-tab" data-tab="layers">More Layers ▾</button>
+                </div>
 
                 <div class="map-panel">
 
@@ -126,23 +160,29 @@
 
                 </div>
 
-                <div class="panel-card">
-                    <div class="panel-title">📊 Score Breakdown</div>
-                    <div id="params-grid" class="params-grid"></div>
-                </div>
-
-                <div class="panel-row">
+                <div class="bottom-row">
 
                     <div class="panel-card">
-                        <div class="panel-title">📈 NDVI Trend <span class="panel-subtitle">Growing seasons 2020–2023</span></div>
+                        <div class="panel-title">📊 Score Breakdown</div>
+                        <div id="params-grid" class="params-grid">
+                            <p class="empty-hint">Calculate a FarmScore to see the breakdown.</p>
+                        </div>
+                    </div>
+
+                    <div class="panel-card">
+                        <div class="panel-title">📈 NDVI Trend <span class="panel-subtitle">2020–2023</span></div>
                         <div id="trend-chart-wrap" class="trend-chart-wrap">
                             <p class="trend-empty">Calculate a FarmScore to see the trend.</p>
                         </div>
                     </div>
 
-                    <div class="panel-card" id="crop-card" style="display:none;">
-                        <div class="panel-title">🌾 Recommended Crops</div>
-                        <div id="crop-result"></div>
+                    <div class="panel-card">
+                        <div class="panel-title">📋 Land Summary</div>
+                        <div class="summary-row"><span>Farm Score</span><span id="ls-score">—</span></div>
+                        <div class="summary-row"><span>Risk Level</span><span id="ls-risk">—</span></div>
+                        <div class="summary-row"><span>Top Crop</span><span id="ls-crop">—</span></div>
+                        <div class="summary-row"><span>Farm Area</span><span id="ls-area">—</span></div>
+                        <div class="summary-row"><span>Eval. Date</span><span id="ls-date">—</span></div>
                     </div>
 
                 </div>
@@ -150,49 +190,16 @@
             </div>
 
             <!-- Right column -->
-            <div class="right-column" id="result-panel" style="display:none;">
+            <div class="right-column">
 
-                <div class="panel-card score-card">
-                    <div class="panel-title">FarmScore</div>
-
-                    <div class="score-ring-wrap">
-                        <div class="score-ring">
-                            <svg viewBox="0 0 130 130">
-                                <circle cx="65" cy="65" r="54" fill="none" stroke="#22303c" stroke-width="10"/>
-                                <circle
-                                    cx="65" cy="65" r="54" fill="none"
-                                    stroke="#34d399" stroke-width="10"
-                                    stroke-linecap="round"
-                                    stroke-dasharray="339.3"
-                                    stroke-dashoffset="339.3"
-                                    id="ring-arc"
-                                    transform="rotate(-90 65 65)"/>
-                            </svg>
-                            <div class="score-center">
-                                <div class="score-number" id="final-score">—</div>
-                                <div class="score-label">/900</div>
-                            </div>
-                        </div>
-                        <div class="score-grade" id="score-grade"></div>
-                        <div class="coord-display" id="coord-display"></div>
-                    </div>
-                </div>
-
-                <div class="panel-card">
-                    <div class="panel-title">📋 Land Summary</div>
-                    <div class="summary-row"><span>Farm Score</span><span id="ls-score">—</span></div>
-                    <div class="summary-row"><span>Risk Level</span><span id="ls-risk">—</span></div>
-                    <div class="summary-row"><span>Top Crop Suitability</span><span id="ls-crop">—</span></div>
-                    <div class="summary-row"><span>Farm Area</span><span id="ls-area">—</span></div>
-                    <div class="summary-row"><span>Evaluation Date</span><span id="ls-date">—</span></div>
-                </div>
-
-                <div class="panel-card" id="nearby-resources-card" style="display:none;">
+                <div class="panel-card nearby-card" id="nearby-resources-card">
                     <div class="panel-title">
                         📍 Nearby Resources
                         <span class="accessibility-pill">Accessibility <b id="accessibility-value">—</b></span>
                     </div>
-                    <div id="nearby-resources-list" class="nearby-list"></div>
+                    <div id="nearby-resources-list" class="nearby-list">
+                        <p class="empty-hint">Select a location to find nearby resources.</p>
+                    </div>
                 </div>
 
                 <div class="panel-card loan-card">
@@ -206,13 +213,12 @@
         </div>
 
         <footer class="app-footer">
-            <span>🛰️ Data Sources: Sentinel-2 · NASA GLDAS · CHIRPS · MODIS LST</span>
-            <span>FarmScore uses real satellite data to evaluate land suitability for agricultural financing.</span>
+            <span>🛰️ Sentinel-2 · NASA GLDAS · CHIRPS · MODIS LST</span>
+            <span>Real satellite data — not AI-generated.</span>
         </footer>
 
         <!-- Hidden functional fields — kept in the DOM and driven by map click /
-             search / geolocation, not shown as raw inputs (matches the
-             floating "Selected Location" card pattern instead). -->
+             search / geolocation, not shown as raw inputs. -->
         <div class="visually-hidden">
             <input type="date" id="start-date" value="2020-08-01">
             <input type="date" id="end-date" value="2023-10-31">
@@ -223,6 +229,7 @@
             <input type="text" id="state-input">
             <input type="text" id="pincode-input">
             <input type="text" id="farm-area">
+            <div id="weather-forecast"></div>
         </div>
 
     </div>
