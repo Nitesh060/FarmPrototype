@@ -617,7 +617,7 @@ function renderResult(data) {
         const availability = c.data_available ? "" : `<span class="p-nodata">⚠ no data</span>`;
 
         return `
-            <div class="score-row">
+            <div class="score-row" data-param="${key}">
                 <div class="sr-icon" style="background:${PARAM_COLORS[i]}22;color:${PARAM_COLORS[i]}">${PARAM_ICONS[key] || "📊"}</div>
                 <div class="sr-body">
                     <div class="sr-top">
@@ -640,22 +640,10 @@ function renderResult(data) {
         if (legend) legend.style.display = "flex";
     }
 
-    // ---- Crop Recommendation ----
+    // ---- Top crop (folded into Land Summary — no separate crop card in this layout) ----
     let topCrop = "—";
     if (recommended_crops && recommended_crops.primary) {
-        document.getElementById("crop-card").style.display = "block";
-        topCrop = recommended_crops.primary.crop;
-        document.getElementById("crop-result").innerHTML = `
-            <div class="crop-row">
-                <span class="crop-medal">🥇</span>
-                <span class="crop-name">${recommended_crops.primary.crop}</span>
-                <span class="crop-score">${recommended_crops.primary.score}%</span>
-            </div>
-            <div class="crop-row">
-                <span class="crop-medal">🥈</span>
-                <span class="crop-name">${recommended_crops.secondary.crop}</span>
-                <span class="crop-score">${recommended_crops.secondary.score}%</span>
-            </div>`;
+        topCrop = `${recommended_crops.primary.crop} (${recommended_crops.primary.score}%)`;
     }
 
     // ---- Land Summary ----
@@ -676,8 +664,6 @@ function renderResult(data) {
     // ---- Satellite metadata + historical trend (real Earth Engine data) ----
     renderSatelliteMeta(satellite_meta);
     renderTrendChart(ndvi_trend);
-
-    document.getElementById("result-panel").style.display = "block";
 }
 
 /* ===================================================================
@@ -719,3 +705,45 @@ async function computeScore() {
 }
 
 document.getElementById("calc-btn").addEventListener("click", computeScore);
+
+/* ===================================================================
+   Map toolbar tabs — each does something real, not decorative
+   =================================================================== */
+
+const TAB_TO_PARAM = { ndmi: "ndmi", rainfall: "rainfall", groundwater: "groundwater" };
+
+document.querySelectorAll(".map-tab").forEach(tab => {
+    tab.addEventListener("click", function () {
+        document.querySelectorAll(".map-tab").forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+
+        const key = tab.dataset.tab;
+
+        if (key === "ndvi") {
+            const legend = document.getElementById("ndvi-legend");
+            if (legend) legend.style.display = legend.style.display === "flex" ? "none" : "flex";
+            return;
+        }
+
+        if (key === "layers") {
+            if (map.hasLayer(satelliteLayer)) {
+                map.removeLayer(satelliteLayer);
+                streetLayer.addTo(map);
+            } else {
+                map.removeLayer(streetLayer);
+                satelliteLayer.addTo(map);
+            }
+            return;
+        }
+
+        const paramKey = TAB_TO_PARAM[key];
+        if (paramKey) {
+            const row = document.querySelector(`.score-row[data-param="${paramKey}"]`);
+            if (row) {
+                row.scrollIntoView({ behavior: "smooth", block: "center" });
+                row.classList.add("flash");
+                setTimeout(() => row.classList.remove("flash"), 900);
+            }
+        }
+    });
+});
