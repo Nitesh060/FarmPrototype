@@ -64,6 +64,13 @@ satelliteLayer.addTo(map);
 L.control.zoom({ position: "topleft" }).addTo(map);
 L.control.layers({ "Road Map": streetLayer, "Satellite": satelliteLayer }).addTo(map);
 
+// Leaflet measures its container on init; if the surrounding CSS layout
+// finishes sizing after that (fonts loading, flex/grid settling), the map
+// renders at the wrong zoom/pan. Nudge it once layout has settled, and
+// again on any resize.
+window.addEventListener("load", () => setTimeout(() => map.invalidateSize(), 200));
+window.addEventListener("resize", () => map.invalidateSize());
+
 L.Control.geocoder({ defaultMarkGeocode: false })
     .on("markgeocode", function (e) {
         const center = e.geocode.center;
@@ -371,7 +378,7 @@ async function fetchNearbyResources(lat, lng) {
     const list = document.getElementById("nearby-resources-list");
     const accessEl = document.getElementById("accessibility-value");
 
-    const radius = 15000; // 15 km search radius
+    const radius = 25000; // 25 km search radius — rural areas often have sparse POIs
     const clauses = RESOURCE_TYPES.map(t => `${t.tag}(around:${radius},${lat},${lng});`).join("\n");
     const query = `[out:json][timeout:25];(${clauses});out center;`;
 
@@ -418,7 +425,7 @@ async function fetchNearbyResources(lat, lng) {
                 <span class="nr-label">${r.label}</span>
                 <span class="nr-dist">${
                     r.distanceKm === Infinity
-                        ? "—"
+                        ? `<span class="nr-notfound">not found within ${radius / 1000}km</span>`
                         : r.distanceKm < 1
                             ? `${Math.round(r.distanceKm * 1000)} m`
                             : `${r.distanceKm.toFixed(2)} km`
@@ -426,14 +433,27 @@ async function fetchNearbyResources(lat, lng) {
             </div>`).join("");
 
         // ---- Accessibility index — a transparent, real-distance-derived
-        // score (NOT a model prediction): closer road + market = higher. ----
+        // score (NOT a model prediction). Calibrated for rural India,
+        // where the nearest main road/market can genuinely be 5-15km
+        // away without that meaning "no access". Categories that weren't
+        // found nearby are excluded from the average rather than
+        // counted as a hard 0. ----
         const road = results.find(r => r.label === "Main Road");
         const marketRes = results.find(r => r.label === "Market / Mandi");
-        const roadScore = road && road.distanceKm !== Infinity ? Math.max(0, 100 - road.distanceKm * 15) : 0;
-        const marketScore = marketRes && marketRes.distanceKm !== Infinity ? Math.max(0, 100 - marketRes.distanceKm * 8) : 0;
-        const accessIndex = Math.round((roadScore + marketScore) / 2);
 
-        if (accessEl) accessEl.textContent = `${accessIndex}%`;
+        const scores = [];
+        if (road && road.distanceKm !== Infinity) {
+            scores.push(Math.max(0, 100 - road.distanceKm * 5));
+        }
+        if (marketRes && marketRes.distanceKm !== Infinity) {
+            scores.push(Math.max(0, 100 - marketRes.distanceKm * 4));
+        }
+
+        if (accessEl) {
+            accessEl.textContent = scores.length
+                ? `${Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)}%`
+                : "N/A";
+        }
 
         section.style.display = "block";
     } catch (err) {
