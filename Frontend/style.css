@@ -35,7 +35,7 @@
 
 html, body {
     height: 100%;
-    overflow: hidden;
+    overflow: auto;
 }
 
 body {
@@ -73,7 +73,7 @@ body {
 .app-shell {
     display: grid;
     grid-template-columns: 210px 1fr;
-    height: 100vh;
+    min-height: 100vh;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -87,8 +87,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 16px;
-    min-height: 0;
-    overflow: hidden;
+    min-height: 100vh;
     animation: fadeInLeft 0.4s ease both;
 }
 
@@ -181,12 +180,11 @@ body {
 
 .main-col {
     min-width: 0;
-    height: 100vh;
+    min-height: 100vh;
     display: flex;
     flex-direction: column;
     gap: 10px;
-    padding: 12px 18px;
-    overflow: hidden;
+    padding: 12px 18px 90px;
 }
 
 .top-bar {
@@ -462,7 +460,8 @@ body {
 
 .dashboard-grid {
     flex: 1 1 auto;
-    min-height: 0;
+    height: calc(100vh - 230px);
+    min-height: 540px;
     display: grid;
     grid-template-columns: 1fr 300px;
     gap: 12px;
@@ -854,6 +853,11 @@ body {
     white-space: nowrap;
 }
 
+.nr-notfound {
+    color: var(--text-dim);
+    font-size: 0.6rem;
+}
+
 /* ---------------------------------------------------------------------- */
 /* Loan eligibility                                                       */
 /* ---------------------------------------------------------------------- */
@@ -985,17 +989,13 @@ body {
 }
 
 /* ---------------------------------------------------------------------- */
-/* Small-viewport fallback — only here does scrolling reappear            */
+/* Narrow-screen fallback — real mobile widths only, never triggered by     */
+/* ordinary desktop/laptop browser-chrome height variance                   */
 /* ---------------------------------------------------------------------- */
 
-@media (max-width: 1000px), (max-height: 700px) {
-    html, body {
-        overflow: auto;
-    }
-
+@media (max-width: 760px) {
     .app-shell {
         display: block;
-        height: auto;
     }
 
     .side-nav {
@@ -1003,8 +1003,7 @@ body {
     }
 
     .main-col {
-        height: auto;
-        overflow: visible;
+        min-height: auto;
     }
 
     .info-strip {
@@ -1013,6 +1012,7 @@ body {
 
     .dashboard-grid {
         display: block;
+        height: auto;
     }
 
     .map-panel {
@@ -1026,6 +1026,11 @@ body {
 
     .panel-card {
         overflow: visible;
+        height: auto !important;
+    }
+
+    .trend-chart-wrap {
+        height: 160px;
     }
 
     .right-column {
