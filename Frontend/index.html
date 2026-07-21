@@ -7,7 +7,7 @@
     <title>FarmScore — Agricultural Suitability Dashboard</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css">
@@ -22,285 +22,220 @@
 
 <body>
 
-<div class="shell">
+<div class="app-shell">
 
-    <!-- ============================= SIDEBAR ============================= -->
-    <aside class="sidebar">
+    <!-- =============================== Sidebar =============================== -->
+    <aside class="side-nav">
 
-        <div class="brand">
-            <div class="brand-mark">🌿</div>
-            <div class="brand-copy">
+        <div class="nav-logo">
+            <div class="logo-mark">🌱</div>
+            <div>
                 <h1>FarmScore</h1>
                 <p>Smart Land. Strong Future.</p>
             </div>
         </div>
 
-        <nav class="nav">
-            <a class="nav-item active" href="#">
-                <svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/></svg>
-                Dashboard
-            </a>
-            <a class="nav-item" href="#">
-                <svg viewBox="0 0 24 24"><path d="M9 5 3 7v13l6-2 6 2 6-2V5l-6 2-6-2Z"/><path d="M9 5v13M15 7v13"/></svg>
-                Map Explorer
-            </a>
-            <a class="nav-item" href="#">
-                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
-                FarmScore History
-            </a>
-            <a class="nav-item" href="#">
-                <svg viewBox="0 0 24 24"><path d="M7 3.5h7l4 4V20a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z"/><path d="M9.5 12h5M9.5 15.5h5M9.5 8.5h2.5"/></svg>
-                Reports
-            </a>
-            <a class="nav-item" href="#">
-                <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c.6-3.4 3-5.3 5.5-5.3s4.9 1.9 5.5 5.3"/><path d="M17 4.5a3.2 3.2 0 0 1 0 6.4M20.5 20c-.4-2.5-1.7-4.2-3.5-5"/></svg>
-                Saved Locations
-            </a>
-            <a class="nav-item" href="#">
-                <svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" stroke-linecap="round"/></svg>
-                Insights
-            </a>
+        <nav class="nav-links">
+            <a class="nav-link active"><span>🏠</span> Dashboard</a>
+            <a class="nav-link"><span>🗺️</span> Map Explorer</a>
+            <a class="nav-link"><span>📋</span> Farm Evaluation</a>
+            <a class="nav-link"><span>🕘</span> History</a>
+            <a class="nav-link"><span>📄</span> Reports</a>
+            <a class="nav-link"><span>📍</span> Saved Locations</a>
+            <a class="nav-link"><span>⚙️</span> Settings</a>
         </nav>
 
-        <div class="sidebar-footer">
-            <div class="illustration-card">
-                <div class="illustration-glow"></div>
-                <span>🏡</span>
-                <span class="leaf leaf-a">🌱</span>
-                <span class="leaf leaf-b">🍃</span>
-            </div>
-            <div class="tagline-card">
-                Empowering rural finance with real-time satellite intelligence 🌾
-            </div>
+        <div class="nav-footer-card">
+            <div class="nfc-title">Satellite-Powered Land Intelligence</div>
+            <p>Real Earth observation data for better farming and financing decisions.</p>
         </div>
 
     </aside>
 
-    <!-- ============================= WORKSPACE ============================= -->
-    <div class="workspace">
+    <!-- =============================== Main =============================== -->
+    <div class="main-col">
 
-        <header class="topbar">
-            <div class="topbar-greeting">
-                <h2>Good to see you, Nitesh</h2>
-                <p>Here's the latest land suitability read for your portfolio.</p>
+        <!-- Top bar -->
+        <header class="top-bar">
+
+            <div class="search-wrap">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="location-search" placeholder="Search location, village or city…">
+                <button id="search-btn" class="icon-btn" title="Search">Go</button>
             </div>
 
-            <div class="topbar-actions">
-                <button class="btn-ghost" id="location-btn">
-                    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21"/></svg>
-                    Detect My Location
-                </button>
+            <button class="btn-detect" id="location-btn">
+                <span class="btn-icon">📍</span> Detect My Location
+            </button>
 
-                <button class="icon-btn" type="button" aria-label="Notifications">
-                    <svg viewBox="0 0 24 24"><path d="M6 9a6 6 0 0 1 12 0c0 4.5 1.5 6 1.5 6h-15S6 13.5 6 9Z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>
-                </button>
+            <span class="topbar-spacer"></span>
 
-                <div class="user-chip">
-                    <div class="user-avatar">NK</div>
-                    <div class="user-copy">
-                        <span class="user-name">Nitesh Kumar</span>
-                        <span class="user-role">Product Manager</span>
-                    </div>
-                </div>
-            </div>
+            <span class="bell-icon" title="Notifications">🔔</span>
+
         </header>
 
         <div class="error-box" id="error-box"></div>
 
-        <div class="content-grid">
+        <!-- Info strip -->
+        <div class="info-strip">
 
-            <!-- ===================== MAP COLUMN ===================== -->
+            <div class="info-card" id="sat-status-card" style="display:none;">
+                <div class="info-card-title">🛰️ Satellite Status</div>
+                <div class="info-card-main">Sentinel-2</div>
+                <div class="info-card-line" id="sat-status-scenes">—</div>
+                <div class="info-card-line" id="sat-status-cloud">—</div>
+                <div class="info-card-line muted" id="sat-status-freshness">—</div>
+            </div>
+
+            <div class="info-card" id="selected-location-card" style="display:none;">
+                <div class="info-card-title">📍 Selected Location</div>
+                <div class="info-card-main" id="selected-location-coords">—</div>
+                <div class="info-card-line" id="selected-location-place">—</div>
+            </div>
+
+            <div class="info-card weather-info-card" id="weather-card" style="display:none;">
+                <div class="info-card-title">🌦 Weather Today</div>
+                <div class="weather-current">
+                    <div class="weather-icon" id="weather-icon">☀️</div>
+                    <div>
+                        <div class="weather-current-temp" id="weather-temp">—°C</div>
+                        <div class="weather-current-desc" id="weather-desc">—</div>
+                    </div>
+                    <div class="weather-wind" id="weather-wind"></div>
+                </div>
+                <div class="weather-forecast-strip" id="weather-forecast"></div>
+            </div>
+
+        </div>
+
+        <!-- Main dashboard grid -->
+        <div class="dashboard-grid">
+
+            <!-- Map column -->
             <div class="map-column">
 
-                <div class="map-card">
-
-                    <div class="map-info-badge">
-                        <div class="badge-row-top">
-                            <span class="badge-label">Selected Location</span>
-                        </div>
-
-                        <div class="coord-inline">
-                            <input type="number" id="lat-input" placeholder="Lat" step="0.0001" min="-90" max="90">
-                            <span>,</span>
-                            <input type="number" id="lng-input" placeholder="Lng" step="0.0001" min="-180" max="180">
-                        </div>
-
-                        <div class="badge-place">
-                            <svg viewBox="0 0 24 24" class="pin-ico"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.3"/></svg>
-                            <input id="village-input" readonly placeholder="Click map or search">
-                            <input id="state-input" readonly placeholder="—">
-                        </div>
-
-                        <p class="map-hint">or click anywhere on the map, or draw a farm boundary →</p>
-
-                        <button class="btn-primary" id="calc-btn" onclick="computeScore()">
-                            <span id="btn-text">Calculate FarmScore</span>
-                            <div class="spinner" id="spinner"></div>
-                        </button>
-                    </div>
+                <div class="map-panel">
 
                     <div id="map"></div>
 
+                    <div class="ndvi-legend" id="ndvi-legend" style="display:none;">
+                        <span>NDVI Health</span>
+                        <div class="legend-gradient"></div>
+                        <span class="legend-labels"><span>Low</span><span>High</span></span>
+                    </div>
+
                 </div>
 
-                <div class="map-meta-row">
-                    <div class="meta-chip">
-                        <svg viewBox="0 0 24 24"><path d="M4 6h4M4 10h4M4 14h4M4 18h4"/><rect x="10" y="4" width="10" height="16" rx="1.5"/></svg>
-                        <div>
-                            <div class="meta-label">District</div>
-                            <input id="district-input" readonly placeholder="—">
-                        </div>
-                    </div>
-                    <div class="meta-chip">
-                        <svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M8 3v3M16 3v3"/></svg>
-                        <div>
-                            <div class="meta-label">Date Range</div>
-                            <div class="date-inline">
-                                <input type="date" id="start-date" value="2020-08-01">
-                                <input type="date" id="end-date" value="2025-10-31">
-                            </div>
-                        </div>
-                    </div>
-                    <div class="meta-chip">
-                        <svg viewBox="0 0 24 24"><path d="M12 4v16M4 12h16" stroke-linecap="round"/><circle cx="12" cy="12" r="8.5"/></svg>
-                        <div>
-                            <div class="meta-label">Pincode</div>
-                            <input id="pincode-input" readonly placeholder="—">
-                        </div>
-                    </div>
-                    <div class="meta-chip">
-                        <svg viewBox="0 0 24 24"><path d="M4 20 20 4M4 4h16v16"/></svg>
-                        <div>
-                            <div class="meta-label">Farm Area</div>
-                            <input id="farm-area" readonly placeholder="Draw a polygon">
-                        </div>
-                    </div>
+                <div class="panel-card">
+                    <div class="panel-title">📊 Score Breakdown</div>
+                    <div id="params-grid" class="params-grid"></div>
                 </div>
 
-                <div class="components-section">
-                    <h3>FarmScore Components</h3>
-                    <p class="components-sub">FarmScore uses satellite data &amp; AI models to evaluate land suitability for better agricultural financing.</p>
-                    <div class="params-grid" id="params-grid">
-                        <div class="param-placeholder">Calculate a FarmScore to see the component breakdown here.</div>
+                <div class="panel-row">
+
+                    <div class="panel-card">
+                        <div class="panel-title">📈 NDVI Trend <span class="panel-subtitle">Growing seasons 2020–2023</span></div>
+                        <div id="trend-chart-wrap" class="trend-chart-wrap">
+                            <p class="trend-empty">Calculate a FarmScore to see the trend.</p>
+                        </div>
                     </div>
+
+                    <div class="panel-card" id="crop-card" style="display:none;">
+                        <div class="panel-title">🌾 Recommended Crops</div>
+                        <div id="crop-result"></div>
+                    </div>
+
                 </div>
 
             </div>
 
-            <!-- ===================== SIDE PANEL ===================== -->
-            <aside class="side-panel">
+            <!-- Right column -->
+            <div class="right-column" id="result-panel" style="display:none;">
 
-                <div id="result-panel">
+                <div class="panel-card score-card">
+                    <div class="panel-title">FarmScore</div>
 
-                    <div class="farmscore-card">
-                        <div class="farmscore-card-head">
-                            <span>FarmScore</span>
-                            <svg viewBox="0 0 24 24" class="info-ico"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 8v.01" stroke-linecap="round"/></svg>
-                        </div>
-
-                        <div class="score-ring-wrap">
-                            <div class="score-ring">
-                                <svg viewBox="0 0 130 130">
-                                    <circle cx="65" cy="65" r="54" fill="none" stroke="#1c2636" stroke-width="10"/>
-                                    <circle
-                                        cx="65" cy="65" r="54" fill="none"
-                                        stroke="#22d3a5" stroke-width="10"
-                                        stroke-linecap="round"
-                                        stroke-dasharray="339.3"
-                                        stroke-dashoffset="339.3"
-                                        id="ring-arc"
-                                        transform="rotate(-90 65 65)"/>
-                                </svg>
-                                <div class="score-center">
-                                    <div class="score-number" id="final-score">—</div>
-                                    <div class="score-label">/900</div>
-                                </div>
+                    <div class="score-ring-wrap">
+                        <div class="score-ring">
+                            <svg viewBox="0 0 130 130">
+                                <circle cx="65" cy="65" r="54" fill="none" stroke="#22303c" stroke-width="10"/>
+                                <circle
+                                    cx="65" cy="65" r="54" fill="none"
+                                    stroke="#34d399" stroke-width="10"
+                                    stroke-linecap="round"
+                                    stroke-dasharray="339.3"
+                                    stroke-dashoffset="339.3"
+                                    id="ring-arc"
+                                    transform="rotate(-90 65 65)"/>
+                            </svg>
+                            <div class="score-center">
+                                <div class="score-number" id="final-score">—</div>
+                                <div class="score-label">/900</div>
                             </div>
-
-                            <div class="score-grade" id="score-grade"></div>
-                            <div class="coord-display" id="coord-display"></div>
                         </div>
-
-                        <p class="suitability-caption">
-                            Agricultural Suitability
-                            <span class="pill-soft">Satellite-derived</span>
-                        </p>
-                        <p class="suitability-desc">
-                            Blended from vegetation health, moisture, rainfall, temperature and groundwater
-                            potential for this exact location.
-                        </p>
+                        <div class="score-grade" id="score-grade"></div>
+                        <div class="coord-display" id="coord-display"></div>
                     </div>
-
-                    <div class="panel-card">
-                        <div class="panel-card-head">Key Factors</div>
-                        <div class="weight-bar-wrap" id="weight-bars"></div>
-                    </div>
-
-                    <div id="weather-card" class="panel-card" style="display:none;">
-                        <div class="panel-card-head">🌦 Weather Forecast</div>
-                        <div class="weather-current">
-                            <div class="weather-icon" id="weather-icon">☀️</div>
-                            <div class="weather-current-info">
-                                <div class="weather-current-temp" id="weather-temp">—°C</div>
-                                <div class="weather-current-desc" id="weather-desc">—</div>
-                            </div>
-                            <div class="weather-wind" id="weather-wind"></div>
-                        </div>
-                        <div class="weather-forecast-strip" id="weather-forecast"></div>
-                    </div>
-
-                    <div id="ai-summary-card" class="panel-card" style="display:none;">
-                        <div class="panel-card-head">🤖 AI Farm Analysis</div>
-                        <div id="ai-summary-result"></div>
-                    </div>
-
-                    <div id="crop-card" class="panel-card" style="display:none;">
-                        <div class="panel-card-head">🌾 Recommended Crops</div>
-                        <div id="crop-result"></div>
-                    </div>
-
-                    <div id="land-cover-card" class="panel-card" style="display:none;">
-                        <div class="panel-card-head">🛰️ AI Land Cover (CNN)</div>
-                        <div id="land-cover-result"></div>
-                    </div>
-
-                    <div class="panel-card loan-card">
-                        <div class="loan-card-head">
-                            <svg viewBox="0 0 24 24" class="shield-ico"><path d="M12 3 4.5 6v6c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6L12 3Z"/><path d="m9 12 2 2 4-4"/></svg>
-                            Loan Eligibility Suggestion
-                        </div>
-                        <div class="loan-card-body">
-                            <div class="loan-copy">
-                                <div class="loan-headline" id="loan-headline">High Possibility</div>
-                                <p>Based on land suitability and environmental factors for this location.</p>
-                            </div>
-                            <svg viewBox="0 0 24 24" class="bank-ico"><path d="M3 10 12 4l9 6"/><path d="M4.5 10.5v8M9 10.5v8M15 10.5v8M19.5 10.5v8"/><path d="M3 20h18"/></svg>
-                        </div>
-                        <button class="btn-generate" type="button" onclick="window.print()">
-                            <svg viewBox="0 0 24 24"><path d="M7 3.5h7l4 4V20a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z"/><path d="M9.5 12h5M9.5 15.5h5"/></svg>
-                            Generate Report
-                        </button>
-                    </div>
-
-                    <div class="methodology-note">
-                        <strong>Formula:</strong>
-                        WeightedAvg = (25×GW + 25×NDVI + 20×NDMI + 10×RainfallScore + 20×TempScore) /100
-                        <br>
-                        FinalScore = round(WeightedAvg) + 150
-                    </div>
-
                 </div>
 
-            </aside>
+                <div class="panel-card">
+                    <div class="panel-title">📋 Land Summary</div>
+                    <div class="summary-row"><span>Farm Score</span><span id="ls-score">—</span></div>
+                    <div class="summary-row"><span>Risk Level</span><span id="ls-risk">—</span></div>
+                    <div class="summary-row"><span>Top Crop Suitability</span><span id="ls-crop">—</span></div>
+                    <div class="summary-row"><span>Farm Area</span><span id="ls-area">—</span></div>
+                    <div class="summary-row"><span>Evaluation Date</span><span id="ls-date">—</span></div>
+                </div>
 
+                <div class="panel-card" id="nearby-resources-card" style="display:none;">
+                    <div class="panel-title">
+                        📍 Nearby Resources
+                        <span class="accessibility-pill">Accessibility <b id="accessibility-value">—</b></span>
+                    </div>
+                    <div id="nearby-resources-list" class="nearby-list"></div>
+                </div>
+
+                <div class="panel-card loan-card">
+                    <div class="panel-title">🏦 Loan Eligibility Suggestion</div>
+                    <div class="loan-status" id="loan-status">—</div>
+                    <p class="loan-desc" id="loan-desc">Calculate a FarmScore to see a suggestion.</p>
+                </div>
+
+            </div>
+
+        </div>
+
+        <footer class="app-footer">
+            <span>🛰️ Data Sources: Sentinel-2 · NASA GLDAS · CHIRPS · MODIS LST</span>
+            <span>FarmScore uses real satellite data to evaluate land suitability for agricultural financing.</span>
+        </footer>
+
+        <!-- Hidden functional fields — kept in the DOM and driven by map click /
+             search / geolocation, not shown as raw inputs (matches the
+             floating "Selected Location" card pattern instead). -->
+        <div class="visually-hidden">
+            <input type="date" id="start-date" value="2020-08-01">
+            <input type="date" id="end-date" value="2023-10-31">
+            <input type="number" id="lat-input">
+            <input type="number" id="lng-input">
+            <input type="text" id="village-input">
+            <input type="text" id="district-input">
+            <input type="text" id="state-input">
+            <input type="text" id="pincode-input">
+            <input type="text" id="farm-area">
         </div>
 
     </div>
 
 </div>
 
+<!-- Floating action button — the real, single Calculate control -->
+<button class="fab-calculate" id="calc-btn">
+    <span class="fab-icon">📊</span>
+    <span id="btn-text">Calculate FarmScore</span>
+</button>
+
 <script src="app.js"></script>
 
 </body>
-
 </html>
