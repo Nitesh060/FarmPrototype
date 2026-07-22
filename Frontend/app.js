@@ -707,12 +707,25 @@ function renderResult(data) {
         const unit = c.unit ? ` ${c.unit}` : "";
         const availability = c.data_available ? "" : `<span class="p-nodata">⚠ no data</span>`;
 
+        let extraTitle = "";
+        if (key === "rainfall" && data.rainfall_monthly && data.rainfall_monthly.length) {
+            extraTitle = "Monthly breakdown: " + data.rainfall_monthly
+                .map(m => `${m.month} ${m.mm_per_day != null ? m.mm_per_day.toFixed(1) : "—"} mm/day`)
+                .join(", ");
+        }
+        if (key === "groundwater" && data.groundwater_trend && data.groundwater_trend.length) {
+            extraTitle = "Yearly trend: " + data.groundwater_trend
+                .map(t => `${t.year}: ${t.groundwater != null ? t.groundwater.toFixed(0) : "—"} kg/m²`)
+                .join(", ");
+        }
+        const hasExtra = extraTitle ? ' <span class="sr-info" title="' + extraTitle.replace(/"/g, "&quot;") + '">ⓘ</span>' : "";
+
         return `
             <div class="score-row" data-param="${key}">
                 <div class="sr-icon" style="background:${PARAM_COLORS[i]}22;color:${PARAM_COLORS[i]}">${PARAM_ICONS[key] || "📊"}</div>
                 <div class="sr-body">
                     <div class="sr-top">
-                        <span class="sr-label">${PARAM_LABELS[key] || key}</span>
+                        <span class="sr-label">${PARAM_LABELS[key] || key}${hasExtra}</span>
                         <span class="sr-status" style="color:${PARAM_COLORS[i]}">${statusLabel(pct)}</span>
                     </div>
                     <div class="mini-bar"><div class="mini-bar-fill" style="width:${pct}%;background:${PARAM_COLORS[i]}"></div></div>
