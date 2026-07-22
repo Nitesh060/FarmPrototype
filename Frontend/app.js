@@ -777,6 +777,16 @@ function renderResult(data) {
     loanBadge.style.color = gs.color;
     document.getElementById("loan-desc").textContent = meta.loanNote;
 
+    // ---- AI Insight (Gemini, grounded in the real data above — hidden
+    // entirely if unavailable, never replaced with placeholder text) ----
+    const aiCard = document.getElementById("ai-insight-card");
+    if (data.ai_insight) {
+        document.getElementById("ai-insight-text").textContent = data.ai_insight;
+        aiCard.style.display = "block";
+    } else {
+        aiCard.style.display = "none";
+    }
+
     // ---- Satellite metadata + historical trend (real Earth Engine data) ----
     renderSatelliteMeta(satellite_meta);
     renderTrendChart(ndvi_trend);
