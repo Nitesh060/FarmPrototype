@@ -479,6 +479,7 @@ body {
     flex-direction: column;
     gap: 10px;
     min-height: 0;
+    padding-bottom: 64px;
     animation: fadeInUp 0.4s ease 0.1s both;
 }
 
@@ -605,7 +606,7 @@ body {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     gap: 10px;
-    height: 190px;
+    height: 235px;
 }
 
 .panel-card {
