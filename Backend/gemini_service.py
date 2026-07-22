@@ -102,7 +102,99 @@ def _call_gemini(model: str, prompt: str, api_key: str) -> Optional[str]:
     return text or None
 
 
-def generate_insight(context: Dict[str, Any]) -> Optional[str]:
+CHAT_SYSTEM_INSTRUCTIONS = """You are FarmScore Assistant, a helpful agriculture and land-suitability
+advisor built into a satellite-based farmland assessment tool used by bank
+loan officers in India.
+
+You can answer two kinds of questions:
+1. General agriculture/satellite questions (e.g. "what is NDVI?", "which
+   crops need less water?", "what does groundwater depletion mean?") —
+   answer these from general knowledge, plainly and briefly.
+2. Questions about the specific farm currently being evaluated — answer
+   these ONLY using the "Current farm data" block below, if provided.
+   Never invent a score, crop name, distance, or any other number for
+   this specific farm that isn't in that block. If the data needed to
+   answer isn't in the block, say so plainly instead of guessing.
+
+Keep answers short (2-5 sentences), plain language, no markdown headers."""
+
+
+def _format_farm_context(farm_context: Optional[Dict[str, Any]]) -> str:
+    if not farm_context:
+        return "No farm has been calculated yet in this session."
+
+    components = farm_context.get("components", {})
+    comp_lines = "\n".join(
+        f"- {k}: {v.get('raw_value')} {v.get('unit') or ''} "
+        f"(sub-score {v.get('sub_score')}/100, weight {v.get('weight')}%, source {v.get('source')})"
+        for k, v in components.items() if v
+    )
+    crop = (farm_context.get("recommended_crops") or {}).get("primary", {})
+    climate = farm_context.get("climate_risk") or {}
+
+    return f"""FarmScore: {farm_context.get('score')}/900 ({farm_context.get('grade')})
+Components:
+{comp_lines or "not available"}
+Top recommended crop: {crop.get('crop', 'not available')} ({crop.get('score', '')}%)
+Climate risk: {climate.get('level', 'not available')} — {', '.join(climate.get('flags', [])) or 'no flags'}
+Surface water (NDWI): {farm_context.get('ndwi')}
+Coordinates: {farm_context.get('coordinates')}"""
+
+
+def generate_chat_reply(
+    message: str,
+    history: Optional[list] = None,
+    farm_context: Optional[Dict[str, Any]] = None,
+) -> Optional[str]:
+    """Return a grounded chat reply, or None if Gemini is unavailable."""
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return None
+
+    contents = []
+    for turn in (history or [])[-10:]:  # cap history to keep prompts small
+        role = "model" if turn.get("role") == "assistant" else "user"
+        text = turn.get("text", "")
+        if text:
+            contents.append({"role": role, "parts": [{"text": text}]})
+
+    system_block = CHAT_SYSTEM_INSTRUCTIONS + "\n\nCurrent farm data:\n" + _format_farm_context(farm_context)
+    contents.append({"role": "user", "parts": [{"text": message}]})
+
+    for model in (GEMINI_MODEL, GEMINI_FALLBACK_MODEL):
+        try:
+            response = requests.post(
+                _gemini_url(model),
+                params={"key": api_key},
+                json={
+                    "contents": contents,
+                    "systemInstruction": {"parts": [{"text": system_block}]},
+                    "generationConfig": {"temperature": 0.4, "maxOutputTokens": 300},
+                },
+                timeout=REQUEST_TIMEOUT_S,
+            )
+            response.raise_for_status()
+            data = response.json()
+            candidates = data.get("candidates") or []
+            if not candidates:
+                return None
+            parts = candidates[0].get("content", {}).get("parts", [])
+            text = "".join(p.get("text", "") for p in parts).strip()
+            return text or None
+        except requests.exceptions.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else None
+            logger.warning("Gemini chat (%s) HTTP error %s: %s", model, status, exc)
+            if status == 404 and model != GEMINI_FALLBACK_MODEL:
+                continue
+            return None
+        except requests.exceptions.RequestException as exc:
+            logger.warning("Gemini chat (%s) request failed: %s", model, exc)
+            return None
+        except (KeyError, IndexError, ValueError) as exc:
+            logger.warning("Gemini chat (%s) response parsing failed: %s", model, exc)
+            return None
+
+    return None
     """Return a short grounded explanation string, or None if unavailable."""
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
