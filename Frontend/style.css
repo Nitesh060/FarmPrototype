@@ -698,6 +698,17 @@ body {
     text-overflow: ellipsis;
 }
 
+.sr-info {
+    color: var(--text-dim);
+    font-size: 0.62rem;
+    cursor: help;
+    margin-left: 2px;
+}
+
+.sr-info:hover {
+    color: var(--primary);
+}
+
 .sr-status {
     font-family: var(--font-display);
     font-size: 0.64rem;
