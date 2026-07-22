@@ -82,21 +82,28 @@ def generate_insight(context: Dict[str, Any]) -> Optional[str]:
 
     prompt = _build_prompt(context)
 
-    try:
-        response = requests.post(
-            GEMINI_URL,
-            params={"key": api_key},
-            json={
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {
-                    "temperature": 0.3,
-                    "maxOutputTokens": 220,
-                },
+   try:
+    response = requests.post(
+        GEMINI_URL,
+        params={"key": api_key},
+        json={
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 0.3,
+                "maxOutputTokens": 220,
             },
-            timeout=REQUEST_TIMEOUT_S,
-        )
-        response.raise_for_status()
-        data = response.json()
+        },
+        timeout=REQUEST_TIMEOUT_S,
+    )
+
+    print("========== GEMINI DEBUG ==========")
+    print("Status Code:", response.status_code)
+    print("Response:", response.text)
+    print("==================================")
+
+    response.raise_for_status()
+
+    data = response.json()
 
         candidates = data.get("candidates") or []
         if not candidates:
