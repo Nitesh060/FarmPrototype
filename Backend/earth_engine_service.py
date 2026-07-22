@@ -192,11 +192,12 @@ def _reduce_mean(image: ee.Image, region: ee.Geometry, scale: int) -> Optional[f
 
 def _fetch_s2_indices(
     lat: float, lng: float, polygon: Optional[dict] = None
-) -> Tuple[Optional[float], Optional[float]]:
-    """Mean NDVI and NDMI from Sentinel-2 Surface Reflectance (Harmonized) in a single query.
+) -> Tuple[Optional[float], Optional[float], Optional[float]]:
+    """Mean NDVI, NDMI and NDWI from Sentinel-2 Surface Reflectance (Harmonized) in a single query.
 
-    NDVI = (B8 – B4) / (B8 + B4)
-    NDMI = (B8 – B11) / (B8 + B11)
+    NDVI = (B8 – B4)  / (B8 + B4)    — vegetation health
+    NDMI = (B8 – B11) / (B8 + B11)   — vegetation/canopy moisture
+    NDWI = (B3 – B8)  / (B3 + B8)    — surface water content (McFeeters)
     """
     region = _get_region(lat, lng, polygon)
     s2 = (
@@ -210,12 +211,13 @@ def _fetch_s2_indices(
     def compute_indices(img: ee.Image) -> ee.Image:
         ndvi = img.normalizedDifference(["B8", "B4"]).rename("NDVI")
         ndmi = img.normalizedDifference(["B8", "B11"]).rename("NDMI")
-        return img.addBands([ndvi, ndmi])
+        ndwi = img.normalizedDifference(["B3", "B8"]).rename("NDWI")
+        return img.addBands([ndvi, ndmi, ndwi])
 
     indices_collection = s2.map(compute_indices)
-    mean_indices = indices_collection.select(["NDVI", "NDMI"]).mean()
+    mean_indices = indices_collection.select(["NDVI", "NDMI", "NDWI"]).mean()
 
-    # Perform a single reduceRegion call for both bands
+    # Perform a single reduceRegion call for all three bands
     result = (
         mean_indices
         .reduceRegion(
@@ -229,7 +231,8 @@ def _fetch_s2_indices(
 
     ndvi_val = float(result["NDVI"]) if result and result.get("NDVI") is not None else None
     ndmi_val = float(result["NDMI"]) if result and result.get("NDMI") is not None else None
-    return ndvi_val, ndmi_val
+    ndwi_val = float(result["NDWI"]) if result and result.get("NDWI") is not None else None
+    return ndvi_val, ndmi_val, ndwi_val
 
 
 def _fetch_rainfall(lat: float, lng: float, polygon: Optional[dict] = None) -> Optional[float]:
@@ -249,6 +252,33 @@ def _fetch_rainfall(lat: float, lng: float, polygon: Optional[dict] = None) -> O
 
     mean_precip = chirps.mean()
     return _reduce_mean(mean_precip, region, scale=5566)
+
+
+def _fetch_rainfall_monthly(
+    lat: float, lng: float, polygon: Optional[dict] = None
+) -> list:
+    """Real month-by-month mean daily rainfall (mm/day) for Aug/Sep/Oct,
+    averaged across 2020-2023 — same CHIRPS source as _fetch_rainfall,
+    broken down instead of collapsed into one number.
+    """
+    region = _get_region(lat, lng, polygon)
+    monthly = []
+
+    for month in SEASON_MONTHS:
+        chirps_month = (
+            ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
+            .filterDate(START_DATE, END_DATE)
+            .filterBounds(region)
+            .filter(ee.Filter.calendarRange(month, month, "month"))
+            .select("precipitation")
+        )
+        val = _reduce_mean(chirps_month.mean(), region, scale=5566)
+        monthly.append({
+            "month": ["Aug", "Sep", "Oct"][SEASON_MONTHS.index(month)],
+            "mm_per_day": round(val, 2) if val is not None else None,
+        })
+
+    return monthly
 
 
 def _fetch_temperature(lat: float, lng: float, polygon: Optional[dict] = None) -> Optional[float]:
@@ -366,6 +396,31 @@ def _fetch_ndvi_trend(
     return trend
 
 
+def _fetch_groundwater_trend(
+    lat: float,
+    lng: float,
+    polygon: Optional[dict] = None,
+    years: Tuple[int, ...] = (2020, 2021, 2022, 2023),
+) -> list:
+    """Mean growing-season groundwater proxy (kg/m²) per year — real
+    per-year composites from the same GLDAS collection.
+    """
+    region = _get_region(lat, lng, polygon)
+    trend = []
+
+    for year in years:
+        gldas_year = (
+            ee.ImageCollection("NASA/GLDAS/V021/NOAH/G025/T3H")
+            .filterDate(f"{year}-08-01", f"{year}-10-31")
+            .filterBounds(region)
+            .select("SoilMoi100_200cm_inst")
+        )
+        val = _reduce_mean(gldas_year.mean(), region, scale=27830)
+        trend.append({"year": year, "groundwater": round(val, 2) if val is not None else None})
+
+    return trend
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -425,18 +480,25 @@ def fetch_farm_data(
     else:
         logger.info("Fetching Earth Engine data for (%.5f, %.5f) …", lat, lng)
 
-    ndvi, ndmi = _fetch_s2_indices(lat, lng, polygon)
+    ndvi, ndmi, ndwi = _fetch_s2_indices(lat, lng, polygon)
     logger.debug("  NDVI:         %s", ndvi)
     logger.debug("  NDMI:         %s", ndmi)
+    logger.debug("  NDWI:         %s", ndwi)
 
     rainfall = _fetch_rainfall(lat, lng, polygon)
     logger.debug("  Rainfall:     %s mm/day", rainfall)
+
+    rainfall_monthly = _fetch_rainfall_monthly(lat, lng, polygon)
+    logger.debug("  Rainfall monthly: %s", rainfall_monthly)
 
     temperature = _fetch_temperature(lat, lng, polygon)
     logger.debug("  Temperature:  %s °C", temperature)
 
     groundwater = _fetch_groundwater(lat, lng, polygon)
     logger.debug("  Groundwater:  %s kg/m²", groundwater)
+
+    groundwater_trend = _fetch_groundwater_trend(lat, lng, polygon)
+    logger.debug("  Groundwater trend: %s", groundwater_trend)
 
     satellite_meta = _fetch_s2_meta(lat, lng, polygon)
     logger.debug("  Satellite meta: %s", satellite_meta)
@@ -447,9 +509,12 @@ def fetch_farm_data(
     result = {
         "ndvi": round(ndvi, 6) if ndvi is not None else None,
         "ndmi": round(ndmi, 6) if ndmi is not None else None,
+        "ndwi": round(ndwi, 6) if ndwi is not None else None,
         "rainfall": round(rainfall, 4) if rainfall is not None else None,
+        "rainfall_monthly": rainfall_monthly,
         "temperature": round(temperature, 4) if temperature is not None else None,
         "groundwater": round(groundwater, 4) if groundwater is not None else None,
+        "groundwater_trend": groundwater_trend,
         "satellite_meta": satellite_meta,
         "ndvi_trend": ndvi_trend,
     }
