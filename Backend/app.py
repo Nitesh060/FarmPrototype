@@ -18,6 +18,7 @@ from flask_cors import CORS
 from earth_engine_service import fetch_farm_data, initialise_earth_engine
 from scoring import calculate_score
 from crop_recommendation import recommend_crop
+from gemini_service import generate_insight
 
 load_dotenv()
 
@@ -137,7 +138,7 @@ def calculate():
         satellite_data.get("rainfall"), satellite_data.get("temperature")
     )
 
-    return jsonify({
+    response_payload = {
         "score": result["final_score"],
         "grade": result["grade"],
         "components": result["components"],
@@ -150,7 +151,20 @@ def calculate():
         "climate_risk": climate_risk,
         "coordinates": {"lat": lat, "lng": lng},
         "elapsed_seconds": elapsed,
-    }), 200
+    }
+
+    # AI insight is generated from the payload above ONLY — grounded in
+    # real, already-computed numbers. If it fails or no key is set, the
+    # rest of the response is returned unaffected.
+    try:
+        ai_insight = generate_insight({**response_payload, "climate_risk": climate_risk})
+    except Exception:
+        logger.exception("AI insight generation failed (non-fatal)")
+        ai_insight = None
+
+    response_payload["ai_insight"] = ai_insight
+
+    return jsonify(response_payload), 200
 
 
 @app.errorhandler(404)
