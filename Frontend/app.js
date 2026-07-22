@@ -361,11 +361,10 @@ async function fetchWeather(lat, lng) {
    Nearby Resources (real OSM data via the free Overpass API)
    =================================================================== */
 
-const RESOURCE_TYPES = [
+const NODE_RESOURCE_TYPES = [
     { tag: `node["amenity"="bank"]`,        icon: "🏦", label: "Bank Branch" },
+    { tag: `way["power"="substation"]`,     icon: "⚡", label: "Power Substation" },
     { tag: `node["power"="substation"]`,    icon: "⚡", label: "Power Substation" },
-    { tag: `way["waterway"="canal"]`,       icon: "💧", label: "Canal" },
-    { tag: `way["highway"~"^(trunk|primary|secondary)$"]`, icon: "🛣️", label: "Main Road" },
     { tag: `node["amenity"="marketplace"]`, icon: "🏪", label: "Market / Mandi" },
     { tag: `node["amenity"="hospital"]`,    icon: "🏥", label: "Hospital" },
     { tag: `node["amenity"="fuel"]`,        icon: "⛽", label: "Petrol Pump" },
@@ -373,93 +372,165 @@ const RESOURCE_TYPES = [
     { tag: `node["amenity"="school"]`,      icon: "🏫", label: "School" },
 ];
 
+const WAY_RESOURCE_TYPES = [
+    { tag: `way["waterway"="canal"]`, icon: "💧", label: "Canal" },
+    { tag: `way["highway"~"^(trunk|primary|secondary)$"]`, icon: "🛣️", label: "Main Road" },
+];
+
+const RESOURCE_LABELS = [
+    "Bank Branch", "Power Substation", "Canal", "Main Road",
+    "Market / Mandi", "Hospital", "Petrol Pump", "Railway Station", "School",
+];
+const RESOURCE_ICONS = {
+    "Bank Branch": "🏦", "Power Substation": "⚡", "Canal": "💧", "Main Road": "🛣️",
+    "Market / Mandi": "🏪", "Hospital": "🏥", "Petrol Pump": "⛽",
+    "Railway Station": "🚉", "School": "🏫",
+};
+
+function matchesLabel(label, tags) {
+    return (
+        (label === "Bank Branch" && tags.amenity === "bank") ||
+        (label === "Power Substation" && tags.power === "substation") ||
+        (label === "Market / Mandi" && tags.amenity === "marketplace") ||
+        (label === "Hospital" && tags.amenity === "hospital") ||
+        (label === "Petrol Pump" && tags.amenity === "fuel") ||
+        (label === "Railway Station" && tags.railway === "station") ||
+        (label === "School" && tags.amenity === "school")
+    );
+}
+
+/** Nearest node-type POIs — fast, reliable, no way-geometry issues. */
+async function fetchNearestNodes(lat, lng, radius) {
+    const clauses = NODE_RESOURCE_TYPES.map(t => `${t.tag}(around:${radius},${lat},${lng});`).join("\n");
+    const query = `[out:json][timeout:25];(${clauses});out center;`;
+
+    const res = await fetch("https://overpass-api.de/api/interpreter", {
+        method: "POST",
+        body: "data=" + encodeURIComponent(query),
+    });
+    const data = await res.json();
+    const elements = data.elements || [];
+    const origin = [lng, lat];
+
+    const nearest = {};
+    elements.forEach(el => {
+        const plat = el.lat ?? el.center?.lat;
+        const plon = el.lon ?? el.center?.lon;
+        if (plat == null || plon == null) return;
+
+        const tags = el.tags || {};
+        const distanceKm = turf.distance(origin, [plon, plat], { units: "kilometers" });
+
+        ["Bank Branch", "Power Substation", "Market / Mandi", "Hospital", "Petrol Pump", "Railway Station", "School"]
+            .forEach(label => {
+                if (matchesLabel(label, tags) && (nearest[label] == null || distanceKm < nearest[label])) {
+                    nearest[label] = distanceKm;
+                }
+            });
+    });
+
+    return nearest;
+}
+
+/** Nearest road/canal — uses full way geometry (out geom) so the distance is
+ * to the closest point actually inside the search radius, not the centroid
+ * of the entire road/canal (which can be many km away). */
+async function fetchNearestWays(lat, lng, radius) {
+    const clauses = WAY_RESOURCE_TYPES.map(t => `${t.tag}(around:${radius},${lat},${lng});`).join("\n");
+    const query = `[out:json][timeout:25];(${clauses});out geom;`;
+
+    const res = await fetch("https://overpass-api.de/api/interpreter", {
+        method: "POST",
+        body: "data=" + encodeURIComponent(query),
+    });
+    const data = await res.json();
+    const elements = data.elements || [];
+    const origin = [lng, lat];
+
+    const nearest = {};
+    elements.forEach(el => {
+        if (!el.geometry) return;
+        const tags = el.tags || {};
+
+        let label = null;
+        if (tags.waterway === "canal") label = "Canal";
+        else if (["trunk", "primary", "secondary"].includes(tags.highway)) label = "Main Road";
+        if (!label) return;
+
+        // Distance to the nearest vertex actually on this way — far more
+        // accurate than the way's overall centroid for long roads/canals.
+        let minDist = Infinity;
+        el.geometry.forEach(pt => {
+            const d = turf.distance(origin, [pt.lon, pt.lat], { units: "kilometers" });
+            if (d < minDist) minDist = d;
+        });
+
+        if (minDist < Infinity && (nearest[label] == null || minDist < nearest[label])) {
+            nearest[label] = minDist;
+        }
+    });
+
+    return nearest;
+}
+
 async function fetchNearbyResources(lat, lng) {
     const section = document.getElementById("nearby-resources-card");
     const list = document.getElementById("nearby-resources-list");
     const accessEl = document.getElementById("accessibility-value");
 
-    const radius = 25000; // 25 km search radius — rural areas often have sparse POIs
-    const clauses = RESOURCE_TYPES.map(t => `${t.tag}(around:${radius},${lat},${lng});`).join("\n");
-    const query = `[out:json][timeout:25];(${clauses});out center;`;
+    const nodeRadius = 25000; // 25 km — rural amenities are often sparse
+    const wayRadius = 15000;  // 15 km — roads/canals are usually much closer
 
-    try {
-        const res = await fetch("https://overpass-api.de/api/interpreter", {
-            method: "POST",
-            body: "data=" + encodeURIComponent(query),
-        });
-        const data = await res.json();
-        const elements = data.elements || [];
+    // Run both independently: if one fails (e.g. Overpass timeout on a
+    // heavy way query), the other's results still render instead of the
+    // whole card going blank.
+    const [nodeResult, wayResult] = await Promise.allSettled([
+        fetchNearestNodes(lat, lng, nodeRadius),
+        fetchNearestWays(lat, lng, wayRadius),
+    ]);
 
-        const origin = [lng, lat];
-        const results = RESOURCE_TYPES.map(type => ({ ...type, distanceKm: Infinity }));
+    const distances = {
+        ...(nodeResult.status === "fulfilled" ? nodeResult.value : {}),
+        ...(wayResult.status === "fulfilled" ? wayResult.value : {}),
+    };
 
-        elements.forEach(el => {
-            const plat = el.lat ?? el.center?.lat;
-            const plon = el.lon ?? el.center?.lon;
-            if (plat == null || plon == null) return;
+    if (nodeResult.status === "rejected") console.error("Nearby nodes fetch failed:", nodeResult.reason);
+    if (wayResult.status === "rejected") console.error("Nearby ways fetch failed:", wayResult.reason);
 
-            const distanceKm = turf.distance(origin, [plon, plat], { units: "kilometers" });
-            const tags = el.tags || {};
-
-            RESOURCE_TYPES.forEach((type, i) => {
-                const matches =
-                    (type.label === "Bank Branch" && tags.amenity === "bank") ||
-                    (type.label === "Power Substation" && tags.power === "substation") ||
-                    (type.label === "Canal" && tags.waterway === "canal") ||
-                    (type.label === "Main Road" && ["trunk", "primary", "secondary"].includes(tags.highway)) ||
-                    (type.label === "Market / Mandi" && tags.amenity === "marketplace") ||
-                    (type.label === "Hospital" && tags.amenity === "hospital") ||
-                    (type.label === "Petrol Pump" && tags.amenity === "fuel") ||
-                    (type.label === "Railway Station" && tags.railway === "station") ||
-                    (type.label === "School" && tags.amenity === "school");
-
-                if (matches && distanceKm < results[i].distanceKm) {
-                    results[i].distanceKm = distanceKm;
-                }
-            });
-        });
-
-        list.innerHTML = results.map(r => `
-            <div class="nr-row">
-                <span class="nr-icon">${r.icon}</span>
-                <span class="nr-label">${r.label}</span>
-                <span class="nr-dist">${
-                    r.distanceKm === Infinity
-                        ? `<span class="nr-notfound">not found within ${radius / 1000}km</span>`
-                        : r.distanceKm < 1
-                            ? `${Math.round(r.distanceKm * 1000)} m`
-                            : `${r.distanceKm.toFixed(2)} km`
-                }</span>
-            </div>`).join("");
-
-        // ---- Accessibility index — a transparent, real-distance-derived
-        // score (NOT a model prediction). Calibrated for rural India,
-        // where the nearest main road/market can genuinely be 5-15km
-        // away without that meaning "no access". Categories that weren't
-        // found nearby are excluded from the average rather than
-        // counted as a hard 0. ----
-        const road = results.find(r => r.label === "Main Road");
-        const marketRes = results.find(r => r.label === "Market / Mandi");
-
-        const scores = [];
-        if (road && road.distanceKm !== Infinity) {
-            scores.push(Math.max(0, 100 - road.distanceKm * 5));
-        }
-        if (marketRes && marketRes.distanceKm !== Infinity) {
-            scores.push(Math.max(0, 100 - marketRes.distanceKm * 4));
-        }
-
-        if (accessEl) {
-            accessEl.textContent = scores.length
-                ? `${Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)}%`
-                : "N/A";
-        }
-
-        section.style.display = "block";
-    } catch (err) {
-        console.error("Nearby resources fetch error:", err);
+    if (nodeResult.status === "rejected" && wayResult.status === "rejected") {
         section.style.display = "none";
+        return;
     }
+
+    list.innerHTML = RESOURCE_LABELS.map(label => {
+        const d = distances[label];
+        return `
+            <div class="nr-row">
+                <span class="nr-icon">${RESOURCE_ICONS[label]}</span>
+                <span class="nr-label">${label}</span>
+                <span class="nr-dist">${
+                    d == null
+                        ? `<span class="nr-notfound">not found nearby</span>`
+                        : d < 1
+                            ? `${Math.round(d * 1000)} m`
+                            : `${d.toFixed(2)} km`
+                }</span>
+            </div>`;
+    }).join("");
+
+    // ---- Accessibility index — a transparent, real-distance-derived
+    // score (NOT a model prediction), calibrated for rural India where a
+    // 5-15km distance to the nearest road/market is normal. Categories
+    // not found nearby are excluded from the average, not counted as 0. ----
+    const scores = [];
+    if (distances["Main Road"] != null) scores.push(Math.max(0, 100 - distances["Main Road"] * 5));
+    if (distances["Market / Mandi"] != null) scores.push(Math.max(0, 100 - distances["Market / Mandi"] * 4));
+
+    accessEl.textContent = scores.length
+        ? `${Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)}%`
+        : "N/A";
+
+    section.style.display = "block";
 }
 
 /* ===================================================================
@@ -673,6 +744,18 @@ function renderResult(data) {
     document.getElementById("ls-crop").textContent = topCrop;
     document.getElementById("ls-area").textContent = document.getElementById("farm-area").value || "Not drawn";
     document.getElementById("ls-date").textContent = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+
+    const climateEl = document.getElementById("ls-climate");
+    if (climateEl && data.climate_risk) {
+        const cr = data.climate_risk;
+        climateEl.textContent = cr.flags.length ? `${cr.level} (${cr.flags[0]})` : cr.level;
+        climateEl.title = cr.flags.join("; ");
+    }
+
+    const ndwiEl = document.getElementById("ls-ndwi");
+    if (ndwiEl) {
+        ndwiEl.textContent = data.ndwi != null ? data.ndwi.toFixed(3) : "—";
+    }
 
     // ---- Loan Eligibility (qualitative only — no fabricated ₹ figures) ----
     const loanBadge = document.getElementById("loan-status");
