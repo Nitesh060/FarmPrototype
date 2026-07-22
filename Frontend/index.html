@@ -249,6 +249,25 @@
     <span id="btn-text">Calculate FarmScore</span>
 </button>
 
+<!-- Floating chat button + panel -->
+<button class="fab-chat" id="chat-toggle-btn" title="Ask FarmScore Assistant">💬</button>
+
+<div class="chat-panel" id="chat-panel">
+    <div class="chat-header">
+        <span>💬 FarmScore Assistant</span>
+        <button class="chat-close" id="chat-close-btn">✕</button>
+    </div>
+    <div class="chat-messages" id="chat-messages">
+        <div class="chat-msg chat-msg-bot">
+            Hi! Ask me about farming/satellite terms, or about the farm you just calculated.
+        </div>
+    </div>
+    <div class="chat-input-row">
+        <input type="text" id="chat-input" placeholder="Ask a question…" maxlength="1000">
+        <button id="chat-send-btn">➤</button>
+    </div>
+</div>
+
 <script src="app.js"></script>
 
 </body>
