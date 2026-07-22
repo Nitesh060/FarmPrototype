@@ -16,7 +16,7 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-2.5-flash-lite"
 
 GEMINI_URL = (
     f"https://generativelanguage.googleapis.com/v1beta/models/"
