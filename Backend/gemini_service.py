@@ -26,12 +26,11 @@ logger = logging.getLogger(__name__)
 GEMINI_MODEL = "gemini-3.1-flash-lite"
 GEMINI_FALLBACK_MODEL = "gemini-3.5-flash"
 
+REQUEST_TIMEOUT_S = 12
+
 
 def _gemini_url(model: str) -> str:
     return f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-
-
-REQUEST_TIMEOUT_S = 12
 
 
 def _build_prompt(context: Dict[str, Any]) -> str:
@@ -195,6 +194,9 @@ def generate_chat_reply(
             return None
 
     return None
+
+
+def generate_insight(context: Dict[str, Any]) -> Optional[str]:
     """Return a short grounded explanation string, or None if unavailable."""
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
@@ -206,17 +208,20 @@ def generate_chat_reply(
     for model in (GEMINI_MODEL, GEMINI_FALLBACK_MODEL):
         try:
             return _call_gemini(model, prompt, api_key)
+
         except requests.exceptions.HTTPError as exc:
-            # 404 usually means the model name was deprecated/renamed —
-            # worth trying the fallback model instead of giving up.
             status = exc.response.status_code if exc.response is not None else None
             logger.warning("Gemini (%s) HTTP error %s: %s", model, status, exc)
+
             if status == 404 and model != GEMINI_FALLBACK_MODEL:
                 continue
+
             return None
+
         except requests.exceptions.RequestException as exc:
             logger.warning("Gemini (%s) request failed: %s", model, exc)
             return None
+
         except (KeyError, IndexError, ValueError) as exc:
             logger.warning("Gemini (%s) response parsing failed: %s", model, exc)
             return None
