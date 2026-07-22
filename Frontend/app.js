@@ -21,7 +21,7 @@
 
 const API_BASE_URL =
     window.FARMSCORE_API_URL ||
-    "https://farmprototype.onrender.com";
+    "https://farmprototype-1.onrender.com";
 
 async function calculateFarmScore(lat, lng) {
     const url = `${API_BASE_URL}/calculate`;
@@ -790,6 +790,10 @@ function renderResult(data) {
     // ---- Satellite metadata + historical trend (real Earth Engine data) ----
     renderSatelliteMeta(satellite_meta);
     renderTrendChart(ndvi_trend);
+
+    // Keep the full result around so the chatbot can ground its answers
+    // about "this farm" in the same real numbers shown on screen.
+    lastFarmContext = data;
 }
 
 /* ===================================================================
@@ -872,4 +876,72 @@ document.querySelectorAll(".map-tab").forEach(tab => {
             }
         }
     });
+});
+
+/* ===================================================================
+   Floating Chatbot — answers general questions from Gemini's own
+   knowledge, and questions about the currently-calculated farm using
+   the exact real numbers shown on screen (never invented client-side).
+   =================================================================== */
+
+let lastFarmContext = null;
+let chatHistory = [];
+
+const chatPanel = document.getElementById("chat-panel");
+const chatMessages = document.getElementById("chat-messages");
+const chatInput = document.getElementById("chat-input");
+
+document.getElementById("chat-toggle-btn").addEventListener("click", () => {
+    chatPanel.classList.toggle("open");
+    if (chatPanel.classList.contains("open")) chatInput.focus();
+});
+
+document.getElementById("chat-close-btn").addEventListener("click", () => {
+    chatPanel.classList.remove("open");
+});
+
+function appendChatMessage(text, who) {
+    const el = document.createElement("div");
+    el.className = `chat-msg chat-msg-${who}`;
+    el.textContent = text;
+    chatMessages.appendChild(el);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    return el;
+}
+
+async function sendChatMessage() {
+    const message = chatInput.value.trim();
+    if (!message) return;
+
+    chatInput.value = "";
+    appendChatMessage(message, "user");
+    chatHistory.push({ role: "user", text: message });
+
+    const typingEl = appendChatMessage("…", "bot");
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                message,
+                history: chatHistory.slice(0, -1),
+                farm_context: lastFarmContext,
+            }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.error || "Assistant unavailable");
+
+        typingEl.textContent = data.reply;
+        chatHistory.push({ role: "assistant", text: data.reply });
+    } catch (err) {
+        typingEl.textContent = "Sorry, I couldn't reach the assistant. " + (err.message || "");
+        typingEl.classList.add("chat-msg-error");
+    }
+}
+
+document.getElementById("chat-send-btn").addEventListener("click", sendChatMessage);
+chatInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") sendChatMessage();
 });
