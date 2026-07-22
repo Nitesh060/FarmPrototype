@@ -18,7 +18,7 @@ from flask_cors import CORS
 from earth_engine_service import fetch_farm_data, initialise_earth_engine
 from scoring import calculate_score
 from crop_recommendation import recommend_crop
-from gemini_service import generate_insight
+from gemini_service import generate_insight, generate_chat_reply
 
 load_dotenv()
 
@@ -165,6 +165,43 @@ def calculate():
     response_payload["ai_insight"] = ai_insight
 
     return jsonify(response_payload), 200
+
+
+@app.route("/chat", methods=["POST"])
+def chat():
+    """Chatbot endpoint — answers general agriculture questions and
+    questions about the currently-calculated farm. Grounded strictly in
+    the farm_context the frontend sends (the last /calculate response);
+    never invents farm-specific numbers not present in that context.
+
+    Request body:
+        {"message": str, "history": [{"role": "user"|"assistant", "text": str}], "farm_context": {...} | null}
+    """
+    body = request.get_json(silent=True)
+    if not body or not body.get("message"):
+        return jsonify({"error": "'message' is required"}), 400
+
+    message = str(body["message"]).strip()
+    if not message:
+        return jsonify({"error": "'message' cannot be empty"}), 400
+    if len(message) > 1000:
+        return jsonify({"error": "Message too long (max 1000 characters)"}), 400
+
+    history = body.get("history") or []
+    farm_context = body.get("farm_context")
+
+    try:
+        reply = generate_chat_reply(message, history=history, farm_context=farm_context)
+    except Exception:
+        logger.exception("Chat reply generation failed")
+        reply = None
+
+    if reply is None:
+        return jsonify({
+            "error": "AI assistant is currently unavailable. Check that GEMINI_API_KEY is configured."
+        }), 503
+
+    return jsonify({"reply": reply}), 200
 
 
 @app.errorhandler(404)
