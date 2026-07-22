@@ -108,6 +108,35 @@ def calculate():
     elapsed = round(time.time() - t0, 2)
     logger.info("Score=%d Grade=%s elapsed=%.2fs", result["final_score"], result["grade"], elapsed)
 
+    # ---- Climate risk assessment — rule-based on the REAL rainfall/temperature
+    # values just fetched, not a model prediction. Thresholds are simple and
+    # transparent so the "why" is always visible. ----
+    def _assess_climate_risk(rainfall_mm_day, temp_c):
+        flags = []
+        if rainfall_mm_day is not None:
+            if rainfall_mm_day < 2:
+                flags.append("Low rainfall for the growing season")
+            elif rainfall_mm_day > 15:
+                flags.append("Very high rainfall — waterlogging risk")
+        if temp_c is not None:
+            if temp_c > 35:
+                flags.append("High temperature — heat stress risk")
+            elif temp_c < 15:
+                flags.append("Low temperature for most kharif crops")
+
+        if not flags:
+            level = "Low"
+        elif len(flags) == 1:
+            level = "Moderate"
+        else:
+            level = "High"
+
+        return {"level": level, "flags": flags}
+
+    climate_risk = _assess_climate_risk(
+        satellite_data.get("rainfall"), satellite_data.get("temperature")
+    )
+
     return jsonify({
         "score": result["final_score"],
         "grade": result["grade"],
@@ -115,6 +144,10 @@ def calculate():
         "recommended_crops": crop_result,
         "satellite_meta": satellite_data.get("satellite_meta"),
         "ndvi_trend": satellite_data.get("ndvi_trend"),
+        "ndwi": satellite_data.get("ndwi"),
+        "rainfall_monthly": satellite_data.get("rainfall_monthly"),
+        "groundwater_trend": satellite_data.get("groundwater_trend"),
+        "climate_risk": climate_risk,
         "coordinates": {"lat": lat, "lng": lng},
         "elapsed_seconds": elapsed,
     }), 200
