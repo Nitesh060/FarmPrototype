@@ -82,34 +82,46 @@ def generate_insight(context: Dict[str, Any]) -> Optional[str]:
 
     prompt = _build_prompt(context)
 
-   try:
-    response = requests.post(
-        GEMINI_URL,
-        params={"key": api_key},
-        json={
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": 0.3,
-                "maxOutputTokens": 220,
+    try:
+        response = requests.post(
+            GEMINI_URL,
+            params={"key": api_key},
+            json={
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "temperature": 0.3,
+                    "maxOutputTokens": 220,
+                },
             },
-        },
-        timeout=REQUEST_TIMEOUT_S,
-    )
+            timeout=REQUEST_TIMEOUT_S,
+        )
 
-    print("========== GEMINI DEBUG ==========")
-    print("Status Code:", response.status_code)
-    print("Response:", response.text)
-    print("==================================")
+        print("========== GEMINI DEBUG ==========")
+        print("Status Code:", response.status_code)
+        print("Response:", response.text)
+        print("==================================")
 
-    response.raise_for_status()
+        response.raise_for_status()
 
-    data = response.json()
+        data = response.json()
 
         candidates = data.get("candidates") or []
         if not candidates:
             logger.warning("Gemini returned no candidates: %s", data)
             return None
 
+        parts = candidates[0].get("content", {}).get("parts", [])
+        text = "".join(p.get("text", "") for p in parts).strip()
+
+        return text or None
+
+    except requests.exceptions.RequestException as exc:
+        logger.warning("Gemini API call failed: %s", exc)
+        return None
+
+    except (KeyError, IndexError, ValueError) as exc:
+        logger.warning("Gemini response parsing failed: %s", exc)
+        return None
         parts = candidates[0].get("content", {}).get("parts", [])
         text = "".join(p.get("text", "") for p in parts).strip()
         return text or None
