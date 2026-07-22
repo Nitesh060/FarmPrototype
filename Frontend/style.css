@@ -460,8 +460,8 @@ body {
 
 .dashboard-grid {
     flex: 1 1 auto;
-    height: calc(100vh - 230px);
-    min-height: 540px;
+    height: calc(100vh - 300px);
+    min-height: 480px;
     display: grid;
     grid-template-columns: 1fr 300px;
     gap: 12px;
@@ -479,7 +479,6 @@ body {
     flex-direction: column;
     gap: 10px;
     min-height: 0;
-    padding-bottom: 64px;
     animation: fadeInUp 0.4s ease 0.1s both;
 }
 
@@ -892,6 +891,23 @@ body {
     font-size: 0.7rem;
     color: var(--text-muted);
     line-height: 1.45;
+}
+
+/* ---------------------------------------------------------------------- */
+/* AI insight — visually distinct from computed data, clearly generated   */
+/* ---------------------------------------------------------------------- */
+
+.ai-card {
+    flex: 0 0 auto;
+    background: linear-gradient(155deg, rgba(56, 189, 248, 0.1), var(--surface));
+    border-color: rgba(56, 189, 248, 0.3);
+}
+
+.ai-insight-text {
+    margin: 0;
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    line-height: 1.55;
 }
 
 /* ---------------------------------------------------------------------- */
