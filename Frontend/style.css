@@ -1123,6 +1123,163 @@ body {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Crop disease diagnosis modal                                           */
+/* ---------------------------------------------------------------------- */
+
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(4, 10, 7, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.18s ease;
+}
+
+.modal-overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.modal-box {
+    width: 420px;
+    max-width: 92vw;
+    max-height: 85vh;
+    overflow-y: auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    transform: scale(0.97);
+    transition: transform 0.18s ease;
+}
+
+.modal-overlay.open .modal-box {
+    transform: scale(1);
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+    font-weight: 700;
+    position: sticky;
+    top: 0;
+}
+
+.modal-body {
+    padding: 16px;
+}
+
+.diagnose-hint {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin: 0 0 14px;
+}
+
+.upload-drop {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 140px;
+    border: 1.5px dashed var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    padding: 10px;
+    margin-bottom: 12px;
+    transition: border-color 0.15s ease;
+    overflow: hidden;
+}
+
+.upload-drop:hover {
+    border-color: var(--primary);
+}
+
+.upload-drop input {
+    display: none;
+}
+
+#upload-drop-text {
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+#diagnose-preview {
+    max-width: 100%;
+    max-height: 220px;
+    border-radius: var(--radius-sm);
+    object-fit: contain;
+}
+
+.diagnose-result {
+    margin-top: 14px;
+    padding: 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.76rem;
+    animation: fadeInUp 0.3s ease both;
+}
+
+.diag-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 0;
+    border-bottom: 1px dashed var(--border);
+    gap: 10px;
+}
+
+.diag-row:last-of-type {
+    border-bottom: none;
+}
+
+.diag-label {
+    color: var(--text-muted);
+    flex: 0 0 auto;
+}
+
+.diag-diagnosis {
+    font-weight: 700;
+    text-align: right;
+}
+
+.diag-section {
+    margin-top: 10px;
+}
+
+.diag-section ul {
+    margin: 6px 0 0;
+    padding-left: 18px;
+}
+
+.diag-section li {
+    margin-bottom: 3px;
+}
+
+.diag-caveat {
+    margin: 12px 0 0;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border);
+    font-size: 0.68rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+}
+
+.diag-not-plant {
+    margin: 0;
+    color: var(--text-muted);
+}
+
+/* ---------------------------------------------------------------------- */
 /* Keyframes                                                              */
 /* ---------------------------------------------------------------------- */
 
