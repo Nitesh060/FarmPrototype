@@ -145,6 +145,7 @@
                     <button class="map-tab" data-tab="ndmi">Soil Moisture</button>
                     <button class="map-tab" data-tab="rainfall">Rainfall</button>
                     <button class="map-tab" data-tab="groundwater">Groundwater</button>
+                    <button class="map-tab map-tab-spectral" data-tab="spectral" id="spectral-tab-btn">🔬 Spectral</button>
                     <button class="map-tab" data-tab="layers">More Layers ▾</button>
                 </div>
 
@@ -296,6 +297,70 @@
             <button class="btn-detect" id="diagnose-submit-btn" disabled>Diagnose Photo</button>
 
             <div class="diagnose-result" id="diagnose-result" style="display:none;"></div>
+
+        </div>
+
+    </div>
+</div>
+
+<!-- Hyperspectral / Spectral Intelligence modal -->
+<div class="modal-overlay" id="spectral-overlay">
+    <div class="modal-box spectral-modal-box">
+
+        <div class="modal-header">
+            <span>🔬 Spectral Intelligence — Crop Health Engine</span>
+            <button class="chat-close" id="spectral-close-btn">✕</button>
+        </div>
+
+        <div class="modal-body">
+
+            <p class="diagnose-hint" id="spectral-method-note">
+                Estimated from Sentinel-2 multispectral bands (NDVI · NDRE · GNDVI · NDMI · MSI) —
+                true hyperspectral imagery isn't available for arbitrary coordinates, so this is a
+                validated multispectral-proxy approximation, not raw hyperspectral data.
+            </p>
+
+            <div id="spectral-loading" class="spectral-loading" style="display:none;">
+                <div class="spinner"></div>
+                <span>Querying Sentinel-2 spectral bands…</span>
+            </div>
+
+            <div id="spectral-content" style="display:none;">
+
+                <div class="spectral-score-row">
+                    <div class="mini-score-ring spectral-ring">
+                        <svg viewBox="0 0 130 130">
+                            <circle cx="65" cy="65" r="54" fill="none" stroke="#22303c" stroke-width="14"/>
+                            <circle
+                                cx="65" cy="65" r="54" fill="none"
+                                stroke="#38bdf8" stroke-width="14"
+                                stroke-linecap="round"
+                                stroke-dasharray="339.3"
+                                stroke-dashoffset="339.3"
+                                id="spectral-ring-arc"
+                                transform="rotate(-90 65 65)"/>
+                        </svg>
+                        <div class="mini-score-center">
+                            <span id="spectral-final-score">—</span>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="score-grade" id="spectral-grade">—</div>
+                        <div class="coord-display">Spectral Health / 100</div>
+                    </div>
+                </div>
+
+                <div id="spectral-flags" class="spectral-flags"></div>
+
+                <div class="panel-title spectral-subtitle">📊 Index Breakdown</div>
+                <div id="spectral-params-grid" class="params-grid"></div>
+
+                <div class="panel-title spectral-subtitle">✨ AI Recommendations</div>
+                <div id="spectral-recommendations" class="spectral-recs"></div>
+
+            </div>
+
+            <div id="spectral-error" class="diag-not-plant" style="display:none;"></div>
 
         </div>
 
