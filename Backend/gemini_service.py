@@ -236,6 +236,90 @@ Rules:
   banned or restricted-use pesticide."""
 
 
+def _rule_based_spectral_advice(spectral: Dict[str, Any]) -> Dict[str, str]:
+    """Deterministic fallback so the Spectral Intelligence module works
+    fully even without a Gemini API key — derived only from the numbers
+    already computed in spectral_service, never invented."""
+    idx = spectral.get("indices", {})
+    nitrogen_sc = (idx.get("nitrogen") or {}).get("sub_score", 50)
+    moisture_sc = (idx.get("moisture_stress") or {}).get("sub_score", 50)
+    stress_sc = (idx.get("stress_risk") or {}).get("sub_score", 50)
+    chlorophyll_sc = (idx.get("chlorophyll") or {}).get("sub_score", 50)
+
+    if moisture_sc < 40:
+        irrigation = "Canopy moisture is below optimal — increase irrigation frequency and check for uneven water distribution across the plot."
+    elif moisture_sc < 60:
+        irrigation = "Moisture levels are adequate but not optimal — monitor before the next growth stage and irrigate if rainfall is delayed."
+    else:
+        irrigation = "Canopy moisture is healthy — maintain the current irrigation schedule."
+
+    if nitrogen_sc < 40:
+        fertilization = "Red-edge signal suggests nitrogen deficiency — consider a split nitrogen top-dressing and re-check canopy response in 2-3 weeks."
+    elif nitrogen_sc < 60:
+        fertilization = "Nitrogen status is moderate — a light top-dressing may help if the crop is entering a high-demand growth stage."
+    else:
+        fertilization = "Nitrogen status looks healthy from the red-edge signal — no immediate correction indicated."
+
+    if stress_sc < 40 or chlorophyll_sc < 40:
+        crop_mgmt = "Vigor/moisture/chlorophyll signals are inconsistent or low — a field visit is recommended to rule out pest, disease, or localized water stress before the next input decision."
+    else:
+        crop_mgmt = "No major stress inconsistency detected — continue routine scouting and re-run this analysis after the next clear-sky satellite pass."
+
+    return {
+        "irrigation_advice": irrigation,
+        "fertilization_advice": fertilization,
+        "crop_management_advice": crop_mgmt,
+    }
+
+
+def generate_spectral_insight(spectral: Dict[str, Any]) -> Dict[str, str]:
+    """Return irrigation/fertilization/crop-management guidance grounded
+    in the spectral_service output. Uses Gemini when available; always
+    falls back to a deterministic rule-based summary otherwise, so this
+    never returns None (the module stays fully functional offline)."""
+    fallback = _rule_based_spectral_advice(spectral)
+
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return fallback
+
+    idx = spectral.get("indices", {})
+    lines = [
+        f"- {v.get('label')}: {v.get('index')}={v.get('raw_value')}, sub-score {v.get('sub_score')}/100 ({v.get('status')})"
+        for v in idx.values() if v
+    ]
+    prompt = f"""You are an agronomy advisor reading a satellite-derived Spectral
+Health report for a single farm plot (Sentinel-2 multispectral proxies,
+not true hyperspectral). Using ONLY the numbers below, respond with ONLY
+a JSON object (no markdown fences) shaped exactly:
+{{"irrigation_advice": "...", "fertilization_advice": "...", "crop_management_advice": "..."}}
+Each value: 1-2 short plain-language sentences. Do not invent numbers not listed below.
+
+Spectral Health Score: {spectral.get('spectral_score')}/100 ({spectral.get('grade')})
+{chr(10).join(lines)}
+Flags: {', '.join(spectral.get('flags', [])) or 'none'}"""
+
+    contents = [{"role": "user", "parts": [{"text": prompt}]}]
+    raw = _call_with_fallback(api_key, contents, temperature=0.3, max_tokens=260)
+    if not raw:
+        return fallback
+
+    try:
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.strip("`")
+            cleaned = cleaned[4:] if cleaned.lower().startswith("json") else cleaned
+        parsed = json.loads(cleaned)
+        return {
+            "irrigation_advice": parsed.get("irrigation_advice") or fallback["irrigation_advice"],
+            "fertilization_advice": parsed.get("fertilization_advice") or fallback["fertilization_advice"],
+            "crop_management_advice": parsed.get("crop_management_advice") or fallback["crop_management_advice"],
+        }
+    except (json.JSONDecodeError, ValueError):
+        logger.warning("Spectral insight: unparseable Gemini response, using rule-based fallback")
+        return fallback
+
+
 def diagnose_crop_image(image_bytes: bytes, mime_type: str) -> Optional[Dict[str, Any]]:
     """Return a structured diagnosis dict, or None if Gemini is unavailable
     or the response couldn't be parsed. Never fabricates confidence —
