@@ -945,3 +945,112 @@ document.getElementById("chat-send-btn").addEventListener("click", sendChatMessa
 chatInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") sendChatMessage();
 });
+
+/* ===================================================================
+   Crop Disease Diagnosis — real Gemini vision, uploaded photo only.
+   Always shows confidence + caveat exactly as returned by the backend;
+   never invents extra certainty client-side.
+   =================================================================== */
+
+const diagnoseOverlay = document.getElementById("diagnose-overlay");
+const diagnoseFileInput = document.getElementById("diagnose-file-input");
+const diagnosePreview = document.getElementById("diagnose-preview");
+const uploadDropText = document.getElementById("upload-drop-text");
+const diagnoseSubmitBtn = document.getElementById("diagnose-submit-btn");
+const diagnoseResult = document.getElementById("diagnose-result");
+
+document.getElementById("nav-diagnose-btn").addEventListener("click", () => {
+    diagnoseOverlay.classList.add("open");
+});
+
+document.getElementById("diagnose-close-btn").addEventListener("click", () => {
+    diagnoseOverlay.classList.remove("open");
+});
+
+diagnoseOverlay.addEventListener("click", (e) => {
+    if (e.target === diagnoseOverlay) diagnoseOverlay.classList.remove("open");
+});
+
+let selectedImageFile = null;
+
+diagnoseFileInput.addEventListener("change", () => {
+    const file = diagnoseFileInput.files[0];
+    if (!file) return;
+
+    if (file.size > 6 * 1024 * 1024) {
+        alert("Image too large — please use a photo under 6MB.");
+        diagnoseFileInput.value = "";
+        return;
+    }
+
+    selectedImageFile = file;
+    diagnoseSubmitBtn.disabled = false;
+    diagnoseResult.style.display = "none";
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        diagnosePreview.src = e.target.result;
+        diagnosePreview.style.display = "block";
+        uploadDropText.style.display = "none";
+    };
+    reader.readAsDataURL(file);
+});
+
+function confidenceColor(level) {
+    if (level === "High") return "var(--primary)";
+    if (level === "Medium") return "var(--signal, var(--accent-amber))";
+    return "var(--danger)";
+}
+
+async function submitDiagnosis() {
+    if (!selectedImageFile) return;
+
+    diagnoseSubmitBtn.disabled = true;
+    diagnoseSubmitBtn.textContent = "Analyzing…";
+    diagnoseResult.style.display = "none";
+
+    const formData = new FormData();
+    formData.append("image", selectedImageFile);
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/diagnose`, { method: "POST", body: formData });
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.error || "Diagnosis failed");
+
+        if (data.is_plant === false) {
+            diagnoseResult.innerHTML = `
+                <p class="diag-not-plant">This doesn't look like a plant/crop photo. ${data.diagnosis || ""}</p>`;
+        } else {
+            const symptoms = (data.symptoms_observed || []).map(s => `<li>${s}</li>`).join("");
+            const remedies = (data.remedy_steps || []).map(s => `<li>${s}</li>`).join("");
+
+            diagnoseResult.innerHTML = `
+                <div class="diag-row">
+                    <span class="diag-label">Crop (guess)</span>
+                    <span>${data.crop_guess || "Unclear"}</span>
+                </div>
+                <div class="diag-row">
+                    <span class="diag-label">Diagnosis</span>
+                    <span class="diag-diagnosis">${data.diagnosis || "Unclear from photo"}</span>
+                </div>
+                <div class="diag-row">
+                    <span class="diag-label">Confidence</span>
+                    <span style="color:${confidenceColor(data.confidence)}">${data.confidence || "Low"}</span>
+                </div>
+                ${symptoms ? `<div class="diag-section"><strong>Symptoms observed</strong><ul>${symptoms}</ul></div>` : ""}
+                ${remedies ? `<div class="diag-section"><strong>Suggested next steps</strong><ul>${remedies}</ul></div>` : ""}
+                <p class="diag-caveat">⚠ ${data.caveat || "This is an AI estimate, not a substitute for expert advice."}</p>`;
+        }
+
+        diagnoseResult.style.display = "block";
+    } catch (err) {
+        diagnoseResult.innerHTML = `<p class="diag-not-plant">Couldn't diagnose the photo: ${err.message}</p>`;
+        diagnoseResult.style.display = "block";
+    } finally {
+        diagnoseSubmitBtn.disabled = false;
+        diagnoseSubmitBtn.textContent = "Diagnose Photo";
+    }
+}
+
+diagnoseSubmitBtn.addEventListener("click", submitDiagnosis);
