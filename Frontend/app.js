@@ -60,9 +60,18 @@ const satelliteLayer = L.tileLayer(
     { attribution: "Tiles © Esri", maxZoom: 19 }
 );
 
+const terrainLayer = L.tileLayer(
+    "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+    { attribution: "© OpenTopoMap contributors (CC-BY-SA)", maxZoom: 17 }
+);
+
 satelliteLayer.addTo(map);
 L.control.zoom({ position: "topleft" }).addTo(map);
-L.control.layers({ "Road Map": streetLayer, "Satellite": satelliteLayer }).addTo(map);
+const baseLayersControl = L.control.layers(
+    { "Road Map": streetLayer, "Satellite": satelliteLayer, "Terrain": terrainLayer },
+    {},
+    { position: "topright" }
+).addTo(map);
 
 // Leaflet measures its container on init; if the surrounding CSS layout
 // finishes sizing after that (fonts loading, flex/grid settling), the map
@@ -849,6 +858,11 @@ document.querySelectorAll(".map-tab").forEach(tab => {
 
         const key = tab.dataset.tab;
 
+        if (key === "spectral") {
+            openSpectralPanel();
+            return;
+        }
+
         if (key === "ndvi") {
             const legend = document.getElementById("ndvi-legend");
             if (legend) legend.style.display = legend.style.display === "flex" ? "none" : "flex";
@@ -1054,3 +1068,121 @@ async function submitDiagnosis() {
 }
 
 diagnoseSubmitBtn.addEventListener("click", submitDiagnosis);
+
+/* ===================================================================
+   Spectral Intelligence — "hyperspectral-style" crop health engine.
+   Calls the backend /spectral endpoint (real Sentinel-2 multispectral
+   proxy indices: NDVI/NDRE/GNDVI/NDMI/MSI), renders a 0-100 score ring,
+   per-index breakdown, flags, and AI (or rule-based fallback)
+   recommendations. Never fabricates numbers client-side.
+   =================================================================== */
+
+const spectralOverlay = document.getElementById("spectral-overlay");
+const spectralLoading = document.getElementById("spectral-loading");
+const spectralContent = document.getElementById("spectral-content");
+const spectralErrorBox = document.getElementById("spectral-error");
+
+const SPECTRAL_INDEX_ORDER = ["chlorophyll", "nitrogen", "moisture_stress", "stress_risk"];
+const SPECTRAL_COLORS = { chlorophyll: "#34d399", nitrogen: "#a3e635", moisture_stress: "#38bdf8", stress_risk: "#f59e0b" };
+const SPECTRAL_ICONS = { chlorophyll: "🌿", nitrogen: "🧪", moisture_stress: "💧", stress_risk: "⚠️" };
+
+function closeSpectralPanel() {
+    spectralOverlay.classList.remove("open");
+}
+
+document.getElementById("spectral-close-btn").addEventListener("click", closeSpectralPanel);
+spectralOverlay.addEventListener("click", (e) => {
+    if (e.target === spectralOverlay) closeSpectralPanel();
+});
+
+function updateSpectralRing(score) {
+    const pct = Math.max(0, Math.min(1, score / 100));
+    const circumference = 339.3;
+    const offset = circumference * (1 - pct);
+    const arc = document.getElementById("spectral-ring-arc");
+    arc.style.transition = "stroke-dashoffset 1s ease";
+    arc.setAttribute("stroke-dashoffset", offset);
+    const hue = Math.round(pct * 200); // blue(200)->green as it improves
+    arc.setAttribute("stroke", `hsl(${hue}, 70%, 55%)`);
+}
+
+function renderSpectralResult(data) {
+    document.getElementById("spectral-final-score").textContent = data.spectral_score;
+    updateSpectralRing(data.spectral_score);
+
+    const gs = gradeStyle(data.grade === "Moderate" ? "Average" : data.grade);
+    const gradeEl = document.getElementById("spectral-grade");
+    gradeEl.textContent = data.grade;
+    gradeEl.style.background = gs.bg;
+    gradeEl.style.color = gs.color;
+
+    const flagsWrap = document.getElementById("spectral-flags");
+    flagsWrap.innerHTML = (data.flags || []).map(f => `<div class="spectral-flag">⚠ ${f}</div>`).join("");
+
+    const grid = document.getElementById("spectral-params-grid");
+    grid.innerHTML = SPECTRAL_INDEX_ORDER.map(key => {
+        const c = data.indices[key];
+        if (!c) return "";
+        const pct = Math.max(0, Math.min(100, c.sub_score));
+        const color = SPECTRAL_COLORS[key];
+        const availability = c.data_available ? "" : `<span class="p-nodata">⚠ no data</span>`;
+        return `
+            <div class="score-row">
+                <div class="sr-icon" style="background:${color}22;color:${color}">${SPECTRAL_ICONS[key]}</div>
+                <div class="sr-body">
+                    <div class="sr-top">
+                        <span class="sr-label">${c.label}</span>
+                        <span class="sr-status" style="color:${color}">${c.status}</span>
+                    </div>
+                    <div class="mini-bar"><div class="mini-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+                    <div class="sr-meta">${c.index} ${c.raw_value} · weight ${c.weight}% · ${c.source}${availability}</div>
+                </div>
+            </div>`;
+    }).join("");
+
+    const rec = data.recommendations || {};
+    const recWrap = document.getElementById("spectral-recommendations");
+    recWrap.innerHTML = `
+        <div class="spectral-rec-row"><span class="spectral-rec-label">💧 Irrigation</span><p>${rec.irrigation_advice || "—"}</p></div>
+        <div class="spectral-rec-row"><span class="spectral-rec-label">🧪 Fertilization</span><p>${rec.fertilization_advice || "—"}</p></div>
+        <div class="spectral-rec-row"><span class="spectral-rec-label">🌾 Crop Management</span><p>${rec.crop_management_advice || "—"}</p></div>`;
+}
+
+async function fetchSpectralIntelligence(lat, lng) {
+    const res = await fetch(`${API_BASE_URL}/spectral`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lat, lng, polygon: farmPolygon }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || data.detail || `Server error ${res.status}`);
+    return data;
+}
+
+async function openSpectralPanel() {
+    const lat = parseFloat(document.getElementById("lat-input").value);
+    const lng = parseFloat(document.getElementById("lng-input").value);
+
+    if (isNaN(lat) || isNaN(lng)) {
+        const errBox = document.getElementById("error-box");
+        errBox.textContent = "Select a location on the map first, then open Spectral Intelligence.";
+        errBox.style.display = "block";
+        return;
+    }
+
+    spectralOverlay.classList.add("open");
+    spectralContent.style.display = "none";
+    spectralErrorBox.style.display = "none";
+    spectralLoading.style.display = "flex";
+
+    try {
+        const data = await fetchSpectralIntelligence(lat, lng);
+        renderSpectralResult(data);
+        spectralContent.style.display = "block";
+    } catch (err) {
+        spectralErrorBox.textContent = "Couldn't compute spectral intelligence: " + (err.message || "unknown error");
+        spectralErrorBox.style.display = "block";
+    } finally {
+        spectralLoading.style.display = "none";
+    }
+}
