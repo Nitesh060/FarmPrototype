@@ -14,6 +14,8 @@ should block the rest of the response.
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
 import os
 from typing import Any, Dict, Optional
@@ -24,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 GEMINI_MODEL = "gemini-3.1-flash-lite"
 GEMINI_FALLBACK_MODEL = "gemini-3.5-flash"
-REQUEST_TIMEOUT_S = 12
+REQUEST_TIMEOUT_S = 8
 
 
 def _gemini_url(model: str) -> str:
@@ -199,3 +201,81 @@ def generate_chat_reply(
 
     system_block = CHAT_SYSTEM_INSTRUCTIONS + "\n\nCurrent farm data:\n" + _format_farm_context(farm_context)
     return _call_with_fallback(api_key, contents, system_text=system_block, temperature=0.4, max_tokens=300)
+
+
+# ===========================================================================
+# 3. Crop disease diagnosis — real Gemini vision, not a fabricated model.
+#    Always returns an explicit confidence + caveat; never states a
+#    diagnosis as certain, and says so plainly when the image is unclear
+#    or doesn't look like a plant/crop at all.
+# ===========================================================================
+
+DIAGNOSIS_PROMPT = """You are looking at a photo a farmer or bank loan officer uploaded to check
+crop health. Examine the image and respond with ONLY a JSON object (no
+markdown fences, no extra text) in exactly this shape:
+
+{
+  "is_plant": true or false,
+  "crop_guess": "best guess at the crop/plant, or null if unclear",
+  "diagnosis": "the disease/pest/deficiency you observe, or 'No obvious issue detected' if the plant looks healthy, or null if you cannot tell",
+  "confidence": "High" | "Medium" | "Low",
+  "symptoms_observed": ["short phrase", "short phrase"],
+  "remedy_steps": ["short actionable step", "short actionable step"],
+  "caveat": "one sentence reminding the user this is an AI estimate, not a substitute for a local agricultural extension officer or plant pathologist, especially before applying any chemical treatment"
+}
+
+Rules:
+- If the image is not a plant/crop/leaf at all, set is_plant to false and
+  leave the other diagnostic fields null/empty, but still explain briefly
+  in "diagnosis" what the image actually shows.
+- Never invent a confident diagnosis from a blurry, dark, or ambiguous
+  photo — use "Low" confidence and say what would help (a clearer photo,
+  a close-up of the affected leaf, etc.) in remedy_steps instead.
+- Keep remedy_steps practical and low-cost where possible (cultural/
+  mechanical control before chemical), and never recommend a specific
+  banned or restricted-use pesticide."""
+
+
+def diagnose_crop_image(image_bytes: bytes, mime_type: str) -> Optional[Dict[str, Any]]:
+    """Return a structured diagnosis dict, or None if Gemini is unavailable
+    or the response couldn't be parsed. Never fabricates confidence —
+    the prompt explicitly requires Gemini to say when it's unsure.
+    """
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        logger.info("GEMINI_API_KEY not set — skipping crop diagnosis")
+        return None
+
+    b64_data = base64.b64encode(image_bytes).decode("ascii")
+    contents = [{
+        "role": "user",
+        "parts": [
+            {"text": DIAGNOSIS_PROMPT},
+            {"inline_data": {"mime_type": mime_type, "data": b64_data}},
+        ],
+    }]
+
+    for model in (GEMINI_MODEL, GEMINI_FALLBACK_MODEL):
+        try:
+            raw = _call_gemini(model, api_key, contents, temperature=0.2, max_tokens=500)
+            if raw is None:
+                continue
+            cleaned = raw.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.strip("`")
+                cleaned = cleaned[4:] if cleaned.lower().startswith("json") else cleaned
+            return json.loads(cleaned)
+        except requests.exceptions.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else None
+            logger.warning("Gemini diagnosis (%s) HTTP error %s: %s", model, status, exc)
+            if status == 404 and model != GEMINI_FALLBACK_MODEL:
+                continue
+            return None
+        except requests.exceptions.RequestException as exc:
+            logger.warning("Gemini diagnosis (%s) request failed: %s", model, exc)
+            return None
+        except (json.JSONDecodeError, ValueError) as exc:
+            logger.warning("Gemini diagnosis (%s) returned unparseable JSON: %s", model, exc)
+            return None
+
+    return None
