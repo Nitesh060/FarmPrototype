@@ -1280,6 +1280,108 @@ body {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Spectral Intelligence modal                                            */
+/* ---------------------------------------------------------------------- */
+
+.map-tab-spectral {
+    background: linear-gradient(135deg, rgba(56,189,248,0.16), rgba(52,211,153,0.10));
+    border-color: rgba(56,189,248,0.35);
+    color: #7dd3fc;
+}
+
+.map-tab-spectral:hover {
+    border-color: #38bdf8;
+    color: #fff;
+}
+
+.spectral-modal-box {
+    width: 480px;
+}
+
+.spectral-loading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 30px 0;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    justify-content: center;
+}
+
+.spinner {
+    width: 18px;
+    height: 18px;
+    border: 2.5px solid var(--border);
+    border-top-color: var(--accent-blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex: 0 0 auto;
+}
+
+.spectral-score-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 12px;
+}
+
+.spectral-ring {
+    flex: 0 0 auto;
+}
+
+.spectral-subtitle {
+    margin: 16px 0 8px;
+    padding: 0;
+    background: none;
+    font-size: 0.78rem;
+}
+
+.spectral-flags {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.spectral-flag {
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: #fbbf24;
+    font-size: 0.7rem;
+    padding: 7px 10px;
+    border-radius: var(--radius-sm);
+    line-height: 1.4;
+}
+
+.spectral-recs {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.spectral-rec-row {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 9px 11px;
+}
+
+.spectral-rec-label {
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+}
+
+.spectral-rec-row p {
+    margin: 0;
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+/* ---------------------------------------------------------------------- */
 /* Keyframes                                                              */
 /* ---------------------------------------------------------------------- */
 
