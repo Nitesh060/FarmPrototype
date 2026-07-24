@@ -24,6 +24,7 @@ import json
 import logging
 import os
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -480,30 +481,38 @@ def fetch_farm_data(
     else:
         logger.info("Fetching Earth Engine data for (%.5f, %.5f) …", lat, lng)
 
-    ndvi, ndmi, ndwi = _fetch_s2_indices(lat, lng, polygon)
-    logger.debug("  NDVI:         %s", ndvi)
-    logger.debug("  NDMI:         %s", ndmi)
-    logger.debug("  NDWI:         %s", ndwi)
+    # ---- Fetch all parameters concurrently ----
+    # Each of these makes one or more independent Earth Engine network
+    # calls (.getInfo()). Running them one after another was the main
+    # reason /calculate got slow as more real-data features were added.
+    # They don't depend on each other, so a thread pool lets them
+    # overlap — .getInfo() is blocking network I/O and releases the
+    # GIL while waiting, so this is a genuine wall-clock speedup, not
+    # just cosmetic.
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        f_indices = pool.submit(_fetch_s2_indices, lat, lng, polygon)
+        f_rainfall = pool.submit(_fetch_rainfall, lat, lng, polygon)
+        f_rainfall_monthly = pool.submit(_fetch_rainfall_monthly, lat, lng, polygon)
+        f_temperature = pool.submit(_fetch_temperature, lat, lng, polygon)
+        f_groundwater = pool.submit(_fetch_groundwater, lat, lng, polygon)
+        f_groundwater_trend = pool.submit(_fetch_groundwater_trend, lat, lng, polygon)
+        f_satellite_meta = pool.submit(_fetch_s2_meta, lat, lng, polygon)
+        f_ndvi_trend = pool.submit(_fetch_ndvi_trend, lat, lng, polygon)
 
-    rainfall = _fetch_rainfall(lat, lng, polygon)
-    logger.debug("  Rainfall:     %s mm/day", rainfall)
+        ndvi, ndmi, ndwi = f_indices.result()
+        rainfall = f_rainfall.result()
+        rainfall_monthly = f_rainfall_monthly.result()
+        temperature = f_temperature.result()
+        groundwater = f_groundwater.result()
+        groundwater_trend = f_groundwater_trend.result()
+        satellite_meta = f_satellite_meta.result()
+        ndvi_trend = f_ndvi_trend.result()
 
-    rainfall_monthly = _fetch_rainfall_monthly(lat, lng, polygon)
-    logger.debug("  Rainfall monthly: %s", rainfall_monthly)
-
-    temperature = _fetch_temperature(lat, lng, polygon)
-    logger.debug("  Temperature:  %s °C", temperature)
-
-    groundwater = _fetch_groundwater(lat, lng, polygon)
-    logger.debug("  Groundwater:  %s kg/m²", groundwater)
-
-    groundwater_trend = _fetch_groundwater_trend(lat, lng, polygon)
-    logger.debug("  Groundwater trend: %s", groundwater_trend)
-
-    satellite_meta = _fetch_s2_meta(lat, lng, polygon)
+    logger.debug("  NDVI: %s  NDMI: %s  NDWI: %s", ndvi, ndmi, ndwi)
+    logger.debug("  Rainfall: %s mm/day  monthly: %s", rainfall, rainfall_monthly)
+    logger.debug("  Temperature: %s °C", temperature)
+    logger.debug("  Groundwater: %s kg/m²  trend: %s", groundwater, groundwater_trend)
     logger.debug("  Satellite meta: %s", satellite_meta)
-
-    ndvi_trend = _fetch_ndvi_trend(lat, lng, polygon)
     logger.debug("  NDVI trend: %s", ndvi_trend)
 
     result = {
