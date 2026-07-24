@@ -18,7 +18,7 @@ from flask_cors import CORS
 from earth_engine_service import fetch_farm_data, initialise_earth_engine
 from scoring import calculate_score
 from crop_recommendation import recommend_crop
-from gemini_service import generate_insight, generate_chat_reply
+from gemini_service import generate_insight, generate_chat_reply, diagnose_crop_image
 
 load_dotenv()
 
@@ -202,6 +202,50 @@ def chat():
         }), 503
 
     return jsonify({"reply": reply}), 200
+
+
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+MAX_IMAGE_BYTES = 6 * 1024 * 1024  # 6 MB
+
+
+@app.route("/diagnose", methods=["POST"])
+def diagnose():
+    """Crop disease diagnosis from an uploaded photo (multipart/form-data,
+    field name 'image'). Uses Gemini's real vision capability — not a
+    fabricated model. Always includes an explicit confidence level and a
+    caveat that this isn't a substitute for expert advice.
+    """
+    if "image" not in request.files:
+        return jsonify({"error": "No 'image' file in request"}), 400
+
+    file = request.files["image"]
+    if not file or file.filename == "":
+        return jsonify({"error": "Empty file"}), 400
+
+    mime_type = file.mimetype
+    if mime_type not in ALLOWED_IMAGE_TYPES:
+        return jsonify({
+            "error": f"Unsupported image type '{mime_type}'. Use JPEG, PNG, or WEBP."
+        }), 400
+
+    image_bytes = file.read()
+    if len(image_bytes) > MAX_IMAGE_BYTES:
+        return jsonify({"error": "Image too large (max 6 MB)"}), 400
+    if len(image_bytes) == 0:
+        return jsonify({"error": "Empty file"}), 400
+
+    try:
+        result = diagnose_crop_image(image_bytes, mime_type)
+    except Exception:
+        logger.exception("Crop diagnosis failed")
+        result = None
+
+    if result is None:
+        return jsonify({
+            "error": "AI diagnosis is currently unavailable. Check that GEMINI_API_KEY is configured."
+        }), 503
+
+    return jsonify(result), 200
 
 
 @app.errorhandler(404)
