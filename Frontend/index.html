@@ -38,7 +38,7 @@
         <nav class="nav-links">
             <a class="nav-link active"><span>🏠</span> Dashboard</a>
             <a class="nav-link"><span>🗺️</span> Map Explorer</a>
-            <a class="nav-link"><span>📋</span> Farm Evaluation</a>
+            <a class="nav-link" id="nav-diagnose-btn"><span>📋</span> Farm Evaluation</a>
             <a class="nav-link"><span>🕘</span> History</a>
             <a class="nav-link"><span>📄</span> Reports</a>
             <a class="nav-link"><span>📍</span> Saved Locations</a>
@@ -265,6 +265,40 @@
     <div class="chat-input-row">
         <input type="text" id="chat-input" placeholder="Ask a question…" maxlength="1000">
         <button id="chat-send-btn">➤</button>
+    </div>
+</div>
+
+<!-- Crop disease diagnosis modal -->
+<div class="modal-overlay" id="diagnose-overlay">
+    <div class="modal-box">
+
+        <div class="modal-header">
+            <span>📋 Farm Evaluation — Crop Photo Diagnosis</span>
+            <button class="chat-close" id="diagnose-close-btn">✕</button>
+        </div>
+
+        <div class="modal-body">
+
+            <p class="diagnose-hint">
+                Upload a clear photo of an affected leaf or plant. Gemini's
+                vision model will estimate what it sees — this is an AI
+                estimate, not a substitute for a local agricultural
+                extension officer, especially before applying any
+                chemical treatment.
+            </p>
+
+            <label class="upload-drop" id="upload-drop">
+                <input type="file" id="diagnose-file-input" accept="image/jpeg,image/png,image/webp">
+                <span id="upload-drop-text">📷 Click to choose a photo (JPEG/PNG/WEBP, max 6MB)</span>
+                <img id="diagnose-preview" style="display:none;">
+            </label>
+
+            <button class="btn-detect" id="diagnose-submit-btn" disabled>Diagnose Photo</button>
+
+            <div class="diagnose-result" id="diagnose-result" style="display:none;"></div>
+
+        </div>
+
     </div>
 </div>
 
