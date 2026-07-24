@@ -18,7 +18,8 @@ from flask_cors import CORS
 from earth_engine_service import fetch_farm_data, initialise_earth_engine
 from scoring import calculate_score
 from crop_recommendation import recommend_crop
-from gemini_service import generate_insight, generate_chat_reply, diagnose_crop_image
+from gemini_service import generate_insight, generate_chat_reply, diagnose_crop_image, generate_spectral_insight
+from spectral_service import calculate_spectral_intelligence
 
 load_dotenv()
 
@@ -165,6 +166,60 @@ def calculate():
     response_payload["ai_insight"] = ai_insight
 
     return jsonify(response_payload), 200
+
+
+@app.route("/spectral", methods=["POST"])
+def spectral():
+    """Hyperspectral-style crop intelligence — real Sentinel-2 multispectral
+    proxy indices (NDVI/NDRE/GNDVI/NDMI/MSI), a 0-100 Spectral Health
+    Score, rule-based flags, and grounded AI (or rule-based fallback)
+    irrigation/fertilization/crop-management recommendations. See
+    spectral_service.py for the honesty note on why this uses
+    multispectral proxies rather than claiming true hyperspectral data.
+    """
+    body = request.get_json(silent=True)
+    if not body:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    lat = body.get("lat")
+    lng = body.get("lng")
+    polygon = body.get("polygon")
+
+    if lat is None or lng is None:
+        return jsonify({"error": "Both 'lat' and 'lng' are required"}), 400
+
+    try:
+        lat = float(lat)
+        lng = float(lng)
+    except (TypeError, ValueError):
+        return jsonify({"error": "'lat' and 'lng' must be numbers"}), 400
+
+    if not (-90 <= lat <= 90):
+        return jsonify({"error": f"Latitude out of range: {lat}"}), 400
+    if not (-180 <= lng <= 180):
+        return jsonify({"error": f"Longitude out of range: {lng}"}), 400
+
+    t0 = time.time()
+    logger.info("spectral lat=%.5f lng=%.5f", lat, lng)
+
+    try:
+        spectral_result = calculate_spectral_intelligence(lat=lat, lng=lng, polygon=polygon)
+    except Exception as exc:
+        logger.exception("Spectral intelligence computation failed")
+        return jsonify({"error": "Failed to compute spectral intelligence", "detail": str(exc)}), 502
+
+    try:
+        spectral_result["recommendations"] = generate_spectral_insight(spectral_result)
+    except Exception:
+        logger.exception("Spectral AI recommendation failed (non-fatal, using fallback)")
+        spectral_result["recommendations"] = {
+            "irrigation_advice": "Unavailable — recommendation service failed.",
+            "fertilization_advice": "Unavailable — recommendation service failed.",
+            "crop_management_advice": "Unavailable — recommendation service failed.",
+        }
+
+    spectral_result["elapsed_seconds"] = round(time.time() - t0, 2)
+    return jsonify(spectral_result), 200
 
 
 @app.route("/chat", methods=["POST"])
