@@ -20,6 +20,19 @@ from scoring import calculate_score
 from crop_recommendation import recommend_crop
 from gemini_service import generate_insight, generate_chat_reply, diagnose_crop_image, generate_spectral_insight
 from spectral_service import calculate_spectral_intelligence
+from enrichment_service import (
+    fetch_soil_type,
+    fetch_adjacent_land_cover,
+    fetch_cropping_intensity,
+    fetch_irrigation_signal,
+    fetch_temperature_annual_range,
+    fetch_prosperity_proxy,
+    fetch_nearest_water_body_signal,
+    estimate_agro_ecological_zone,
+    fetch_cropping_history,
+)
+from govt_data_service import fetch_mandi_price, fetch_district_yield_comparison
+from glossary import GLOSSARY_TERMS
 
 load_dotenv()
 
@@ -139,6 +152,40 @@ def calculate():
         satellite_data.get("rainfall"), satellite_data.get("temperature")
     )
 
+    # ---- Enrichment modules (SatSource parity) — run concurrently, each
+    # fails soft so one bad dataset never breaks the whole /calculate
+    # response. ----
+    from concurrent.futures import ThreadPoolExecutor as _TPE
+
+    enrichment: dict = {}
+
+    def _safe(name, fn, *args):
+        try:
+            return name, fn(*args)
+        except Exception:
+            logger.exception("Enrichment '%s' failed (non-fatal)", name)
+            return name, None
+
+    with _TPE(max_workers=8) as pool:
+        futures = [
+            pool.submit(_safe, "soil_type", fetch_soil_type, lat, lng, polygon),
+            pool.submit(_safe, "adjacent_land_cover", fetch_adjacent_land_cover, lat, lng, polygon),
+            pool.submit(_safe, "cropping_intensity", fetch_cropping_intensity, lat, lng, polygon),
+            pool.submit(_safe, "irrigation", fetch_irrigation_signal, lat, lng, polygon),
+            pool.submit(_safe, "temperature_annual_range", fetch_temperature_annual_range, lat, lng, polygon),
+            pool.submit(_safe, "regional_prosperity", fetch_prosperity_proxy, lat, lng, polygon),
+            pool.submit(_safe, "nearest_water_body", fetch_nearest_water_body_signal, lat, lng, polygon),
+            pool.submit(_safe, "cropping_history", fetch_cropping_history, lat, lng, polygon),
+        ]
+        for f in futures:
+            key, val = f.result()
+            enrichment[key] = val
+
+    # AEZ is cheap (no GEE call) — compute directly from data already fetched
+    enrichment["agro_ecological_zone"] = estimate_agro_ecological_zone(
+        satellite_data.get("rainfall"), satellite_data.get("temperature")
+    )
+
     response_payload = {
         "score": result["final_score"],
         "grade": result["grade"],
@@ -151,6 +198,7 @@ def calculate():
         "groundwater_trend": satellite_data.get("groundwater_trend"),
         "climate_risk": climate_risk,
         "coordinates": {"lat": lat, "lng": lng},
+        "enrichment": enrichment,
         "elapsed_seconds": elapsed,
     }
 
@@ -300,6 +348,27 @@ def diagnose():
             "error": "AI diagnosis is currently unavailable. Check that GEMINI_API_KEY is configured."
         }), 503
 
+    return jsonify(result), 200
+
+
+@app.route("/glossary", methods=["GET"])
+def glossary():
+    return jsonify({"terms": GLOSSARY_TERMS}), 200
+
+
+@app.route("/mandi-price", methods=["GET"])
+def mandi_price():
+    """Query params: commodity, state, district (optional).
+    Requires DATA_GOV_IN_KEY to be configured — see govt_data_service.py.
+    """
+    commodity = request.args.get("commodity")
+    state = request.args.get("state")
+    district = request.args.get("district")
+
+    if not commodity or not state:
+        return jsonify({"error": "'commodity' and 'state' query params are required"}), 400
+
+    result = fetch_mandi_price(commodity, state, district)
     return jsonify(result), 200
 
 
