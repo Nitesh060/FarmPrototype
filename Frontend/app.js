@@ -384,15 +384,17 @@ const NODE_RESOURCE_TYPES = [
 const WAY_RESOURCE_TYPES = [
     { tag: `way["waterway"="canal"]`, icon: "💧", label: "Canal" },
     { tag: `way["highway"~"^(trunk|primary|secondary)$"]`, icon: "🛣️", label: "Main Road" },
+    { tag: `way["natural"="water"]`, icon: "🌊", label: "Water Body" },
+    { tag: `way["waterway"="river"]`, icon: "🌊", label: "Water Body" },
 ];
 
 const RESOURCE_LABELS = [
-    "Bank Branch", "Power Substation", "Canal", "Main Road",
+    "Bank Branch", "Power Substation", "Canal", "Main Road", "Water Body",
     "Market / Mandi", "Hospital", "Petrol Pump", "Railway Station", "School",
 ];
 const RESOURCE_ICONS = {
     "Bank Branch": "🏦", "Power Substation": "⚡", "Canal": "💧", "Main Road": "🛣️",
-    "Market / Mandi": "🏪", "Hospital": "🏥", "Petrol Pump": "⛽",
+    "Water Body": "🌊", "Market / Mandi": "🏪", "Hospital": "🏥", "Petrol Pump": "⛽",
     "Railway Station": "🚉", "School": "🏫",
 };
 
@@ -464,6 +466,7 @@ async function fetchNearestWays(lat, lng, radius) {
         let label = null;
         if (tags.waterway === "canal") label = "Canal";
         else if (["trunk", "primary", "secondary"].includes(tags.highway)) label = "Main Road";
+        else if (tags.natural === "water" || tags.waterway === "river") label = "Water Body";
         if (!label) return;
 
         // Distance to the nearest vertex actually on this way — far more
@@ -800,10 +803,110 @@ function renderResult(data) {
     renderSatelliteMeta(satellite_meta);
     renderTrendChart(ndvi_trend);
 
+    // ---- Extended Farm Intelligence (SatSource-parity enrichment) ----
+    renderEnrichment(data.enrichment);
+
     // Keep the full result around so the chatbot can ground its answers
     // about "this farm" in the same real numbers shown on screen.
     lastFarmContext = data;
 }
+
+/* ===================================================================
+   Extended Farm Intelligence — soil, land cover, cropping intensity,
+   irrigation, temp range, prosperity proxy, water body, AEZ, history.
+   Every row only renders if the backend actually returned data for it
+   (enrichment fetches fail soft server-side, so any of these can be
+   null if that one Earth Engine call had trouble).
+   =================================================================== */
+function renderEnrichment(enrichment) {
+    const card = document.getElementById("enrichment-card");
+    const list = document.getElementById("enrichment-list");
+    if (!enrichment || !card || !list) {
+        if (card) card.style.display = "none";
+        return;
+    }
+
+    const rows = [];
+
+    if (enrichment.soil_type && enrichment.soil_type.label) {
+        rows.push({ icon: "🪨", label: "Soil Type", value: enrichment.soil_type.label });
+    }
+    if (enrichment.agro_ecological_zone && enrichment.agro_ecological_zone.zone) {
+        rows.push({ icon: "🌍", label: "Agro-Ecological Zone", value: enrichment.agro_ecological_zone.zone });
+    }
+    if (enrichment.cropping_intensity && enrichment.cropping_intensity.label) {
+        rows.push({ icon: "🌿", label: "Cropping Intensity", value: `${enrichment.cropping_intensity.label} (${enrichment.cropping_intensity.estimated_cycles} cycle/yr est.)` });
+    }
+    if (enrichment.irrigation && enrichment.irrigation.likely_irrigated != null) {
+        rows.push({ icon: "💧", label: "Irrigation Signal", value: enrichment.irrigation.likely_irrigated ? "Likely irrigated" : "Likely rainfed" });
+    }
+    if (enrichment.temperature_annual_range && enrichment.temperature_annual_range.min_c != null) {
+        const t = enrichment.temperature_annual_range;
+        rows.push({ icon: "🌡️", label: "Annual Temp Range", value: `${t.min_c}°C – ${t.max_c}°C (avg ${t.mean_c}°C)` });
+    }
+    if (enrichment.nearest_water_body && enrichment.nearest_water_body.water_present != null) {
+        rows.push({ icon: "🌊", label: "Water Body (2km)", value: enrichment.nearest_water_body.water_present ? "Present" : "None detected" });
+    }
+    if (enrichment.regional_prosperity && enrichment.regional_prosperity.tier) {
+        rows.push({ icon: "📈", label: "Regional Activity (proxy)", value: enrichment.regional_prosperity.tier });
+    }
+    if (enrichment.adjacent_land_cover && enrichment.adjacent_land_cover.breakdown && enrichment.adjacent_land_cover.breakdown.length) {
+        const top = enrichment.adjacent_land_cover.breakdown.slice(0, 2).map(b => `${b.class} ${b.percent}%`).join(", ");
+        rows.push({ icon: "🏞️", label: "Adjacent Land", value: top });
+    }
+    if (enrichment.cropping_history && enrichment.cropping_history.years && enrichment.cropping_history.years.length) {
+        const summary = enrichment.cropping_history.years
+            .map(y => `${y.year}: K${y.kharif && y.kharif.cropped ? "✓" : "✗"}/R${y.rabi && y.rabi.cropped ? "✓" : "✗"}`)
+            .join("  ");
+        rows.push({ icon: "🌾", label: "Cropping History (3yr)", value: summary });
+    }
+
+    if (!rows.length) {
+        card.style.display = "none";
+        return;
+    }
+
+    list.innerHTML = rows.map(r => `
+        <div class="enrichment-row">
+            <span class="er-icon">${r.icon}</span>
+            <span class="er-label">${r.label}</span>
+            <span class="er-value">${r.value}</span>
+        </div>`).join("");
+    card.style.display = "block";
+}
+
+/* ===================================================================
+   Glossary modal
+   =================================================================== */
+(function setupGlossary() {
+    const btn = document.getElementById("glossary-btn");
+    const modal = document.getElementById("glossary-modal");
+    const closeBtn = document.getElementById("glossary-close");
+    const content = document.getElementById("glossary-content");
+    if (!btn || !modal) return;
+
+    let loaded = false;
+
+    btn.addEventListener("click", async function () {
+        modal.style.display = "flex";
+        if (loaded) return;
+        try {
+            const res = await fetch(`${API_BASE_URL}/glossary`);
+            const data = await res.json();
+            content.innerHTML = (data.terms || []).map(t => `
+                <div class="glossary-term">
+                    <div class="glossary-term-name">${t.term}${t.full_form ? ` <span class="glossary-full-form">(${t.full_form})</span>` : ""}</div>
+                    <div class="glossary-term-desc">${t.explanation}</div>
+                </div>`).join("");
+            loaded = true;
+        } catch (err) {
+            content.innerHTML = `<p class="empty-hint">Could not load glossary. Is the backend running?</p>`;
+        }
+    });
+
+    closeBtn.addEventListener("click", () => { modal.style.display = "none"; });
+    modal.addEventListener("click", (e) => { if (e.target === modal) modal.style.display = "none"; });
+})();
 
 /* ===================================================================
    Compute Score — single entry point called on button click
