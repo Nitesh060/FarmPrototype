@@ -12,7 +12,7 @@ import sys
 import time
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 
 from earth_engine_service import fetch_farm_data, initialise_earth_engine
@@ -33,6 +33,7 @@ from enrichment_service import (
 )
 from govt_data_service import fetch_mandi_price, fetch_district_yield_comparison
 from glossary import GLOSSARY_TERMS
+from pdf_report import generate_pdf_report
 
 load_dotenv()
 
@@ -349,6 +350,30 @@ def diagnose():
         }), 503
 
     return jsonify(result), 200
+
+
+@app.route("/report/pdf", methods=["POST"])
+def report_pdf():
+    """Generates the SatSource-style PDF report from a /calculate response.
+    Frontend sends the exact result object it already has (score, components,
+    enrichment, trends, etc.) — this endpoint never recomputes or invents
+    anything, it only lays out what was already calculated.
+    """
+    body = request.get_json(silent=True)
+    if not body or "score" not in body:
+        return jsonify({"error": "Request body must be a /calculate response (must include 'score')"}), 400
+
+    try:
+        pdf_bytes = generate_pdf_report(body)
+    except Exception as exc:
+        logger.exception("PDF report generation failed")
+        return jsonify({"error": "Failed to generate PDF report", "detail": str(exc)}), 500
+
+    return Response(
+        pdf_bytes,
+        mimetype="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=FarmScore_Report.pdf"},
+    )
 
 
 @app.route("/glossary", methods=["GET"])
