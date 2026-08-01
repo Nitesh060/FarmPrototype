@@ -12,3 +12,4 @@ scikit-learn
 Pillow
 opencv-python-headless
 google-genai
+matplotlib
