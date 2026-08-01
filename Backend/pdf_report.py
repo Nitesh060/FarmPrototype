@@ -32,6 +32,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+import requests
+
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -41,13 +43,18 @@ from reportlab.platypus import (
 )
 
 from glossary import GLOSSARY_TERMS
+from enrichment_service import fetch_farm_thumbnail_url
 
 logger = logging.getLogger(__name__)
 
 BRAND_BLUE = colors.HexColor("#1a56c4")
+BRAND_BLUE_DARK = colors.HexColor("#0f3a92")
 BRAND_GREEN = colors.HexColor("#2f9e63")
 GREY = colors.HexColor("#666666")
 LIGHT_GREY = colors.HexColor("#f2f2f2")
+PAGE_W, PAGE_H = A4
+HEADER_H = 22 * mm
+FOOTER_H = 14 * mm
 
 GRADE_COLOR = {
     "Poor": "#d64545", "Fair": "#e8912d", "Average": "#e8c02d",
@@ -58,10 +65,41 @@ GRADE_COLOR = {
 def _styles():
     ss = getSampleStyleSheet()
     ss.add(ParagraphStyle("ReportTitle", parent=ss["Heading1"], fontSize=16, textColor=BRAND_BLUE, spaceAfter=2))
-    ss.add(ParagraphStyle("SectionHeading", parent=ss["Heading2"], fontSize=11, textColor=colors.black, spaceBefore=14, spaceAfter=6))
+    ss.add(ParagraphStyle("SectionHeading", parent=ss["Heading2"], fontSize=11.5, textColor=BRAND_BLUE_DARK,
+                           spaceBefore=16, spaceAfter=8, borderPadding=(0, 0, 4, 0)))
     ss.add(ParagraphStyle("Small", parent=ss["Normal"], fontSize=8, textColor=GREY))
+    ss.add(ParagraphStyle("Caption", parent=ss["Normal"], fontSize=7.5, textColor=GREY, alignment=1, spaceBefore=3))
     ss.add(ParagraphStyle("Body", parent=ss["Normal"], fontSize=9, leading=12))
     return ss
+
+
+def _section_heading(text: str, ss) -> list:
+    """A section heading with a small green accent bar to its left,
+    instead of a plain bold line — closer to how the SatSource sample
+    breaks up sections."""
+    bar = Table([[""]], colWidths=[4], rowHeights=[13])
+    bar.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (0, 0), BRAND_GREEN),
+        ("LEFTPADDING", (0, 0), (0, 0), 0),
+        ("RIGHTPADDING", (0, 0), (0, 0), 0),
+        ("TOPPADDING", (0, 0), (0, 0), 0),
+        ("BOTTOMPADDING", (0, 0), (0, 0), 0),
+    ]))
+    heading = Table(
+        [[bar, Paragraph(text, ss["SectionHeading"])]],
+        colWidths=[4, 160 * mm],
+    )
+    heading.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (0, 0), 0),
+        ("RIGHTPADDING", (0, 0), (0, 0), 0),
+        ("TOPPADDING", (0, 0), (0, 0), 0),
+        ("BOTTOMPADDING", (0, 0), (0, 0), 0),
+        ("LEFTPADDING", (1, 0), (1, 0), 8),
+        ("TOPPADDING", (1, 0), (1, 0), 0),
+        ("BOTTOMPADDING", (1, 0), (1, 0), 0),
+    ]))
+    return [heading]
 
 
 # ---------------------------------------------------------------------------
@@ -123,15 +161,8 @@ def _cover_section(data: Dict[str, Any], ss, tmpdir: str) -> list:
     story = []
     score = data.get("score", 0)
     grade = data.get("grade", "—")
-    coords = data.get("coordinates", {})
 
-    story.append(Paragraph("FarmScore Report", ss["ReportTitle"]))
-    story.append(Paragraph(
-        f"Reference: {coords.get('lat','—')}, {coords.get('lng','—')} &nbsp;|&nbsp; "
-        f"Generated On: {datetime.now().strftime('%Y-%m-%d')}", ss["Small"]))
-    story.append(HRFlowable(width="100%", color=colors.HexColor("#dddddd"), spaceBefore=6, spaceAfter=10))
-
-    story.append(Paragraph("Overall FarmScore", ss["SectionHeading"]))
+    story += _section_heading("Overall FarmScore", ss)
 
     gauge_path = _gauge_chart(score, tmpdir)
     gauge_img = Image(gauge_path, width=75 * mm, height=47 * mm)
@@ -167,8 +198,48 @@ def _cover_section(data: Dict[str, Any], ss, tmpdir: str) -> list:
     return story
 
 
+def _farm_location_section(data: Dict[str, Any], ss, tmpdir: str) -> list:
+    """Real Sentinel-2 true-colour image of the farm, not a static map
+    screenshot — same satellite source used for the NDVI/NDMI numbers
+    elsewhere in this report, so what you see visually matches what was
+    measured.
+    """
+    coords = data.get("coordinates", {})
+    lat, lng = coords.get("lat"), coords.get("lng")
+    if lat is None or lng is None:
+        return []
+
+    story = _section_heading("Farm Location", ss)
+
+    try:
+        polygon = data.get("farm_polygon") or data.get("polygon")
+        thumb_url = fetch_farm_thumbnail_url(lat, lng, polygon)
+        if not thumb_url:
+            raise ValueError("No thumbnail URL returned")
+
+        resp = requests.get(thumb_url, timeout=20)
+        resp.raise_for_status()
+
+        img_path = str(Path(tmpdir) / "farm_photo.png")
+        with open(img_path, "wb") as f:
+            f.write(resp.content)
+
+        img = Image(img_path, width=90 * mm, height=90 * mm)
+        story.append(img)
+        story.append(Paragraph(
+            f"Sentinel-2 true-colour composite, ~700 m around {lat}° N, {lng}° E. "
+            f"Cloud-free scenes, 2023–2024.", ss["Caption"]))
+    except Exception:
+        logger.exception("Could not embed farm thumbnail in PDF")
+        story.append(Paragraph(
+            "Satellite image unavailable for this report (imagery service did not respond in time).",
+            ss["Small"]))
+
+    return story
+
+
 def _farm_details_section(data: Dict[str, Any], ss) -> list:
-    story = [Paragraph("Farm Details", ss["SectionHeading"])]
+    story = _section_heading("Farm Details", ss)
     coords = data.get("coordinates", {})
     enrichment = data.get("enrichment", {}) or {}
     irrigation = enrichment.get("irrigation") or {}
@@ -203,7 +274,7 @@ def _cropping_history_section(data: Dict[str, Any], ss) -> list:
     if not history or not history.get("years"):
         return []
 
-    story = [Paragraph("Cropping History (Satellite-derived, 3-year)", ss["SectionHeading"])]
+    story = _section_heading("Cropping History (Satellite-derived, 3-year)", ss)
     rows = [["Year", "Kharif NDVI", "Kharif Status", "Rabi NDVI", "Rabi Status"]]
     for y in history["years"]:
         k, r = y.get("kharif", {}), y.get("rabi", {})
@@ -230,7 +301,7 @@ def _cropping_history_section(data: Dict[str, Any], ss) -> list:
 
 
 def _water_conditions_section(data: Dict[str, Any], ss, tmpdir: str) -> list:
-    story = [Paragraph("Water Conditions", ss["SectionHeading"])]
+    story = _section_heading("Water Conditions", ss)
 
     rainfall_monthly = data.get("rainfall_monthly") or []
     gw_trend = data.get("groundwater_trend") or []
@@ -259,7 +330,7 @@ def _water_conditions_section(data: Dict[str, Any], ss, tmpdir: str) -> list:
 
 def _regional_parameters_section(data: Dict[str, Any], ss) -> list:
     enrichment = data.get("enrichment", {}) or {}
-    story = [Paragraph("Regional Parameters", ss["SectionHeading"])]
+    story = _section_heading("Regional Parameters", ss)
 
     temp_range = enrichment.get("temperature_annual_range") or {}
     prosperity = enrichment.get("regional_prosperity") or {}
@@ -290,7 +361,7 @@ def _regional_parameters_section(data: Dict[str, Any], ss) -> list:
 
 
 def _colour_ranges_section(ss) -> list:
-    story = [Paragraph("Score Bands", ss["SectionHeading"])]
+    story = _section_heading("Score Bands", ss)
     rows = [
         ["Category", "Interval (300-900 scale)"],
         ["Poor", "300 – 420"],
@@ -311,7 +382,7 @@ def _colour_ranges_section(ss) -> list:
 
 
 def _glossary_section(ss) -> list:
-    story = [Paragraph("Glossary", ss["SectionHeading"])]
+    story = _section_heading("Glossary", ss)
     for term in GLOSSARY_TERMS:
         name = term["term"] + (f" ({term['full_form']})" if term.get("full_form") else "")
         story.append(Paragraph(f"<b>{name}</b> — {term['explanation']}", ss["Small"]))
@@ -336,18 +407,54 @@ def _disclaimer_section(ss) -> list:
 # Public entry point
 # ---------------------------------------------------------------------------
 
+def _draw_header_footer(canvas, doc, data: Dict[str, Any]):
+    coords = data.get("coordinates", {})
+    canvas.saveState()
+
+    # ---- Header band ----
+    canvas.setFillColor(BRAND_BLUE_DARK)
+    canvas.rect(0, PAGE_H - HEADER_H, PAGE_W, HEADER_H, fill=1, stroke=0)
+
+    canvas.setFillColor(colors.white)
+    canvas.setFont("Helvetica-Bold", 14)
+    canvas.drawString(16 * mm, PAGE_H - 14 * mm, "\U0001F331 FarmScore Report")
+
+    canvas.setFont("Helvetica", 8)
+    ref_text = f"{coords.get('lat', '—')}, {coords.get('lng', '—')}"
+    date_text = datetime.now().strftime("%Y-%m-%d")
+    canvas.drawRightString(PAGE_W - 16 * mm, PAGE_H - 9 * mm, f"Reference: {ref_text}")
+    canvas.drawRightString(PAGE_W - 16 * mm, PAGE_H - 14 * mm, f"Generated On: {date_text}")
+
+    # ---- Footer band ----
+    canvas.setFillColor(LIGHT_GREY)
+    canvas.rect(0, 0, PAGE_W, FOOTER_H, fill=1, stroke=0)
+    canvas.setFillColor(GREY)
+    canvas.setFont("Helvetica", 7)
+    canvas.drawString(16 * mm, 6 * mm, "Generated by FarmScore \u2014 satellite remote-sensing data, for internal evaluation support.")
+    canvas.drawRightString(PAGE_W - 16 * mm, 6 * mm, f"Page {doc.page}")
+
+    canvas.restoreState()
+
+
 def generate_pdf_report(data: Dict[str, Any]) -> bytes:
     """Build the full PDF report from a /calculate response dict.
     Returns raw PDF bytes.
     """
     ss = _styles()
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=16*mm, bottomMargin=14*mm,
-                             leftMargin=16*mm, rightMargin=16*mm)
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        topMargin=HEADER_H + 6 * mm, bottomMargin=FOOTER_H + 6 * mm,
+        leftMargin=16 * mm, rightMargin=16 * mm,
+    )
+
+    def _on_page(canvas, doc_):
+        _draw_header_footer(canvas, doc_, data)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         story = []
         story += _cover_section(data, ss, tmpdir)
+        story += _farm_location_section(data, ss, tmpdir)
         story += _farm_details_section(data, ss)
 
         history_story = _cropping_history_section(data, ss)
@@ -364,6 +471,6 @@ def generate_pdf_report(data: Dict[str, Any]) -> bytes:
         story += _glossary_section(ss)
         story += _disclaimer_section(ss)
 
-        doc.build(story)
+        doc.build(story, onFirstPage=_on_page, onLaterPages=_on_page)
 
     return buf.getvalue()
