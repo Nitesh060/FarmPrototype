@@ -32,7 +32,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import ee
 
-from earth_engine_service import _get_region, _reduce_mean, _buffered_region
+from earth_engine_service import _get_region, _reduce_mean, _buffered_region, _point_geometry
 
 logger = logging.getLogger(__name__)
 
@@ -389,3 +389,43 @@ def fetch_cropping_history(lat: float, lng: float, polygon: Optional[dict] = Non
         "note": "Season-level cropped/fallow signal from NDVI — not crop-species identification.",
         "source": "Sentinel-2 (seasonal NDVI, 3-year lookback)",
     }
+
+
+# ---------------------------------------------------------------------------
+# Farm location thumbnail — real Sentinel-2 true-colour image, not a map
+# screenshot. This is the same satellite source the rest of the app uses,
+# just rendered as an RGB image instead of an index.
+# ---------------------------------------------------------------------------
+
+def fetch_farm_thumbnail_url(lat: float, lng: float, polygon: Optional[dict] = None, buffer_m: int = 700) -> Optional[str]:
+    """Returns a PNG thumbnail URL for the most recent reasonably
+    cloud-free Sentinel-2 true-colour composite over the farm + a small
+    buffer, so the field sits in visual context (roads, neighbouring
+    plots, water). Returns None if no imagery is available (Earth
+    Engine down, extreme cloud cover, etc.) — callers must handle that.
+    """
+    region = _buffered_region(lat, lng, buffer_m)
+
+    collection = (
+        ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+        .filterBounds(region)
+        .filterDate("2023-01-01", "2024-12-31")
+        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 20))
+        .sort("CLOUDY_PIXEL_PERCENTAGE")
+    )
+
+    image = collection.median().select(["B4", "B3", "B2"])
+
+    try:
+        url = image.getThumbURL({
+            "region": region,
+            "dimensions": 640,
+            "min": 0,
+            "max": 2200,
+            "gamma": 1.3,
+            "format": "png",
+        })
+        return url
+    except Exception:
+        logger.exception("Farm thumbnail generation failed")
+        return None
