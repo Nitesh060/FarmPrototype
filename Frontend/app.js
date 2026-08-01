@@ -803,109 +803,63 @@ function renderResult(data) {
     renderSatelliteMeta(satellite_meta);
     renderTrendChart(ndvi_trend);
 
-    // ---- Extended Farm Intelligence (SatSource-parity enrichment) ----
-    renderEnrichment(data.enrichment);
-
     // Keep the full result around so the chatbot can ground its answers
-    // about "this farm" in the same real numbers shown on screen.
+    // about "this farm" in the same real numbers shown on screen, and so
+    // the Extended Report / PDF export pages can reuse it without
+    // recomputing anything.
     lastFarmContext = data;
+    try {
+        sessionStorage.setItem("farmscore_last_result", JSON.stringify(data));
+    } catch (err) {
+        console.warn("Could not cache result for report/PDF pages:", err);
+    }
+    const downloadBtn = document.getElementById("download-pdf-btn");
+    if (downloadBtn) downloadBtn.disabled = false;
 }
 
 /* ===================================================================
-   Extended Farm Intelligence — soil, land cover, cropping intensity,
-   irrigation, temp range, prosperity proxy, water body, AEZ, history.
-   Every row only renders if the backend actually returned data for it
-   (enrichment fetches fail soft server-side, so any of these can be
-   null if that one Earth Engine call had trouble).
+   PDF Report download — reuses the exact last-computed result (no
+   recomputation), sends it to the backend which lays it out as a PDF.
    =================================================================== */
-function renderEnrichment(enrichment) {
-    const card = document.getElementById("enrichment-card");
-    const list = document.getElementById("enrichment-list");
-    if (!enrichment || !card || !list) {
-        if (card) card.style.display = "none";
-        return;
-    }
-
-    const rows = [];
-
-    if (enrichment.soil_type && enrichment.soil_type.label) {
-        rows.push({ icon: "🪨", label: "Soil Type", value: enrichment.soil_type.label });
-    }
-    if (enrichment.agro_ecological_zone && enrichment.agro_ecological_zone.zone) {
-        rows.push({ icon: "🌍", label: "Agro-Ecological Zone", value: enrichment.agro_ecological_zone.zone });
-    }
-    if (enrichment.cropping_intensity && enrichment.cropping_intensity.label) {
-        rows.push({ icon: "🌿", label: "Cropping Intensity", value: `${enrichment.cropping_intensity.label} (${enrichment.cropping_intensity.estimated_cycles} cycle/yr est.)` });
-    }
-    if (enrichment.irrigation && enrichment.irrigation.likely_irrigated != null) {
-        rows.push({ icon: "💧", label: "Irrigation Signal", value: enrichment.irrigation.likely_irrigated ? "Likely irrigated" : "Likely rainfed" });
-    }
-    if (enrichment.temperature_annual_range && enrichment.temperature_annual_range.min_c != null) {
-        const t = enrichment.temperature_annual_range;
-        rows.push({ icon: "🌡️", label: "Annual Temp Range", value: `${t.min_c}°C – ${t.max_c}°C (avg ${t.mean_c}°C)` });
-    }
-    if (enrichment.nearest_water_body && enrichment.nearest_water_body.water_present != null) {
-        rows.push({ icon: "🌊", label: "Water Body (2km)", value: enrichment.nearest_water_body.water_present ? "Present" : "None detected" });
-    }
-    if (enrichment.regional_prosperity && enrichment.regional_prosperity.tier) {
-        rows.push({ icon: "📈", label: "Regional Activity (proxy)", value: enrichment.regional_prosperity.tier });
-    }
-    if (enrichment.adjacent_land_cover && enrichment.adjacent_land_cover.breakdown && enrichment.adjacent_land_cover.breakdown.length) {
-        const top = enrichment.adjacent_land_cover.breakdown.slice(0, 2).map(b => `${b.class} ${b.percent}%`).join(", ");
-        rows.push({ icon: "🏞️", label: "Adjacent Land", value: top });
-    }
-    if (enrichment.cropping_history && enrichment.cropping_history.years && enrichment.cropping_history.years.length) {
-        const summary = enrichment.cropping_history.years
-            .map(y => `${y.year}: K${y.kharif && y.kharif.cropped ? "✓" : "✗"}/R${y.rabi && y.rabi.cropped ? "✓" : "✗"}`)
-            .join("  ");
-        rows.push({ icon: "🌾", label: "Cropping History (3yr)", value: summary });
-    }
-
-    if (!rows.length) {
-        card.style.display = "none";
-        return;
-    }
-
-    list.innerHTML = rows.map(r => `
-        <div class="enrichment-row">
-            <span class="er-icon">${r.icon}</span>
-            <span class="er-label">${r.label}</span>
-            <span class="er-value">${r.value}</span>
-        </div>`).join("");
-    card.style.display = "block";
-}
-
-/* ===================================================================
-   Glossary modal
-   =================================================================== */
-(function setupGlossary() {
-    const btn = document.getElementById("glossary-btn");
-    const modal = document.getElementById("glossary-modal");
-    const closeBtn = document.getElementById("glossary-close");
-    const content = document.getElementById("glossary-content");
-    if (!btn || !modal) return;
-
-    let loaded = false;
+(function setupPdfDownload() {
+    const btn = document.getElementById("download-pdf-btn");
+    if (!btn) return;
 
     btn.addEventListener("click", async function () {
-        modal.style.display = "flex";
-        if (loaded) return;
+        if (!lastFarmContext) return;
+        const original = btn.textContent;
+        btn.textContent = "Generating…";
+        btn.disabled = true;
+
         try {
-            const res = await fetch(`${API_BASE_URL}/glossary`);
-            const data = await res.json();
-            content.innerHTML = (data.terms || []).map(t => `
-                <div class="glossary-term">
-                    <div class="glossary-term-name">${t.term}${t.full_form ? ` <span class="glossary-full-form">(${t.full_form})</span>` : ""}</div>
-                    <div class="glossary-term-desc">${t.explanation}</div>
-                </div>`).join("");
-            loaded = true;
+            const res = await fetch(`${API_BASE_URL}/report/pdf`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(lastFarmContext),
+            });
+            if (!res.ok) throw new Error("Report generation failed");
+
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "FarmScore_Report.pdf";
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
         } catch (err) {
-            content.innerHTML = `<p class="empty-hint">Could not load glossary. Is the backend running?</p>`;
+            console.error("PDF download error:", err);
+            const errBox = document.getElementById("error-box");
+            if (errBox) {
+                errBox.textContent = "Could not generate PDF report. Please try again.";
+                errBox.style.display = "block";
+            }
+        } finally {
+            btn.textContent = original;
+            btn.disabled = false;
         }
     });
-
-    closeBtn.addEventListener("click", () => { modal.style.display = "none"; });
-    modal.addEventListener("click", (e) => { if (e.target === modal) modal.style.display = "none"; });
 })();
 
 /* ===================================================================
