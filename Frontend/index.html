@@ -36,13 +36,10 @@
         </div>
 
         <nav class="nav-links">
-            <a class="nav-link active"><span>🏠</span> Dashboard</a>
-            <a class="nav-link"><span>🗺️</span> Map Explorer</a>
+            <a class="nav-link active" href="index.html"><span>🏠</span> Dashboard</a>
             <a class="nav-link" id="nav-diagnose-btn"><span>📋</span> Farm Evaluation</a>
-            <a class="nav-link"><span>🕘</span> History</a>
-            <a class="nav-link"><span>📄</span> Reports</a>
-            <a class="nav-link"><span>📍</span> Saved Locations</a>
-            <a class="nav-link"><span>⚙️</span> Settings</a>
+            <a class="nav-link" href="report.html"><span>📄</span> Extended Report</a>
+            <a class="nav-link" href="glossary.html"><span>📚</span> Glossary</a>
         </nav>
 
         <div class="nav-footer-card">
@@ -216,26 +213,15 @@
                     <p class="loan-desc" id="loan-desc">Calculate a FarmScore to see a suggestion.</p>
                 </div>
 
-                <div class="panel-card enrichment-card" id="enrichment-card" style="display:none;">
-                    <div class="panel-title">🧭 Extended Farm Intelligence <span class="panel-subtitle">Soil · Land · Cropping · Climate</span></div>
-                    <div id="enrichment-list" class="enrichment-list"></div>
+                <div class="panel-card">
+                    <div class="panel-title">📄 Full Report</div>
+                    <p class="loan-desc">Soil, cropping history, irrigation, water &amp; regional data live on the Extended Report page.</p>
+                    <a href="report.html" class="btn-detect" style="display:block;text-align:center;text-decoration:none;margin-top:6px;">View Extended Report →</a>
+                    <button id="download-pdf-btn" class="btn-detect" style="display:block;width:100%;margin-top:8px;" disabled>⬇️ Download PDF Report</button>
                 </div>
 
             </div>
 
-        </div>
-
-        <button id="glossary-btn" class="glossary-fab" title="Glossary">📚</button>
-        <div id="glossary-modal" class="glossary-modal" style="display:none;">
-            <div class="glossary-modal-inner">
-                <div class="glossary-modal-header">
-                    <span>📚 Glossary</span>
-                    <button id="glossary-close">✕</button>
-                </div>
-                <div id="glossary-content" class="glossary-content">
-                    <p class="empty-hint">Loading…</p>
-                </div>
-            </div>
         </div>
 
         <footer class="app-footer">
