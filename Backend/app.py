@@ -10,6 +10,7 @@ import logging
 import os
 import sys
 import time
+from typing import Optional
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request, Response
@@ -34,6 +35,7 @@ from enrichment_service import (
 from govt_data_service import fetch_mandi_price, fetch_district_yield_comparison
 from glossary import GLOSSARY_TERMS
 from pdf_report import generate_pdf_report
+import whatsapp_service
 
 load_dotenv()
 
@@ -69,57 +71,33 @@ def health_check():
     return jsonify({"status": "ok", "service": "FarmScore API"}), 200
 
 
-@app.route("/calculate", methods=["POST"])
-def calculate():
-    body = request.get_json(silent=True)
-    if not body:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    lat = body.get("lat")
-    lng = body.get("lng")
-    polygon = body.get("polygon")
-
-    if lat is None or lng is None:
-        return jsonify({"error": "Both 'lat' and 'lng' are required"}), 400
-
-    try:
-        lat = float(lat)
-        lng = float(lng)
-    except (TypeError, ValueError):
-        return jsonify({"error": "'lat' and 'lng' must be numbers"}), 400
-
-    if not (-90 <= lat <= 90):
-        return jsonify({"error": f"Latitude out of range: {lat}"}), 400
-    if not (-180 <= lng <= 180):
-        return jsonify({"error": f"Longitude out of range: {lng}"}), 400
-
+def compute_farmscore(lat: float, lng: float, polygon: Optional[dict] = None) -> dict:
+    """Core FarmScore computation — satellite fetch, scoring, crop
+    recommendation, climate risk, enrichment modules, AI insight.
+    Used by both /calculate (web) and the WhatsApp webhook, so the two
+    channels always return identical numbers for the same coordinates.
+    Raises on hard failures (satellite fetch / scoring); callers decide
+    how to surface that (HTTP error vs a WhatsApp text reply).
+    """
     t0 = time.time()
-    logger.info("calculate lat=%.5f lng=%.5f", lat, lng)
+    logger.info("compute_farmscore lat=%.5f lng=%.5f", lat, lng)
 
-    try:
-        satellite_data = fetch_farm_data(lat=lat, lng=lng, polygon=polygon)
-    except Exception as exc:
-        logger.exception("Earth Engine fetch failed")
-        return jsonify({"error": "Failed to retrieve satellite data", "detail": str(exc)}), 502
+    satellite_data = fetch_farm_data(lat=lat, lng=lng, polygon=polygon)
 
-    try:
-        result = calculate_score(
-            ndvi=satellite_data.get("ndvi"),
-            ndmi=satellite_data.get("ndmi"),
-            rainfall=satellite_data.get("rainfall"),
-            temperature=satellite_data.get("temperature"),
-            groundwater=satellite_data.get("groundwater"),
-        )
-        crop_result = recommend_crop(
-            satellite_data.get("ndvi"),
-            satellite_data.get("ndmi"),
-            satellite_data.get("rainfall"),
-            satellite_data.get("temperature"),
-            satellite_data.get("groundwater"),
-        )
-    except Exception as exc:
-        logger.exception("Scoring computation failed")
-        return jsonify({"error": "Scoring computation failed", "detail": str(exc)}), 500
+    result = calculate_score(
+        ndvi=satellite_data.get("ndvi"),
+        ndmi=satellite_data.get("ndmi"),
+        rainfall=satellite_data.get("rainfall"),
+        temperature=satellite_data.get("temperature"),
+        groundwater=satellite_data.get("groundwater"),
+    )
+    crop_result = recommend_crop(
+        satellite_data.get("ndvi"),
+        satellite_data.get("ndmi"),
+        satellite_data.get("rainfall"),
+        satellite_data.get("temperature"),
+        satellite_data.get("groundwater"),
+    )
 
     elapsed = round(time.time() - t0, 2)
     logger.info("Score=%d Grade=%s elapsed=%.2fs", result["final_score"], result["grade"], elapsed)
@@ -154,8 +132,7 @@ def calculate():
     )
 
     # ---- Enrichment modules (SatSource parity) — run concurrently, each
-    # fails soft so one bad dataset never breaks the whole /calculate
-    # response. ----
+    # fails soft so one bad dataset never breaks the whole response. ----
     from concurrent.futures import ThreadPoolExecutor as _TPE
 
     enrichment: dict = {}
@@ -213,6 +190,38 @@ def calculate():
         ai_insight = None
 
     response_payload["ai_insight"] = ai_insight
+    return response_payload
+
+
+@app.route("/calculate", methods=["POST"])
+def calculate():
+    body = request.get_json(silent=True)
+    if not body:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    lat = body.get("lat")
+    lng = body.get("lng")
+    polygon = body.get("polygon")
+
+    if lat is None or lng is None:
+        return jsonify({"error": "Both 'lat' and 'lng' are required"}), 400
+
+    try:
+        lat = float(lat)
+        lng = float(lng)
+    except (TypeError, ValueError):
+        return jsonify({"error": "'lat' and 'lng' must be numbers"}), 400
+
+    if not (-90 <= lat <= 90):
+        return jsonify({"error": f"Latitude out of range: {lat}"}), 400
+    if not (-180 <= lng <= 180):
+        return jsonify({"error": f"Longitude out of range: {lng}"}), 400
+
+    try:
+        response_payload = compute_farmscore(lat, lng, polygon)
+    except Exception as exc:
+        logger.exception("compute_farmscore failed")
+        return jsonify({"error": "Failed to compute FarmScore", "detail": str(exc)}), 502
 
     return jsonify(response_payload), 200
 
@@ -374,6 +383,34 @@ def report_pdf():
         mimetype="application/pdf",
         headers={"Content-Disposition": "attachment; filename=FarmScore_Report.pdf"},
     )
+
+
+@app.route("/webhook/whatsapp", methods=["GET"])
+def whatsapp_verify():
+    """Meta calls this once, when you click 'Verify and Save' on the
+    WhatsApp webhook config page — confirms you control this URL.
+    """
+    mode = request.args.get("hub.mode")
+    token = request.args.get("hub.verify_token")
+    challenge = request.args.get("hub.challenge")
+
+    result = whatsapp_service.verify_webhook(mode, token, challenge)
+    if result is not None:
+        return result, 200
+    return "Verification failed", 403
+
+
+@app.route("/webhook/whatsapp", methods=["POST"])
+def whatsapp_incoming():
+    """Meta calls this for every incoming message/status update. Always
+    return 200 quickly — Meta retries aggressively on non-200 responses.
+    """
+    payload = request.get_json(silent=True) or {}
+    try:
+        whatsapp_service.handle_incoming_message(payload, compute_farmscore, generate_chat_reply)
+    except Exception:
+        logger.exception("WhatsApp webhook processing failed")
+    return jsonify({"status": "ok"}), 200
 
 
 @app.route("/glossary", methods=["GET"])
