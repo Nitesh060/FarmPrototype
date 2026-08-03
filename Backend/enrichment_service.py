@@ -28,6 +28,7 @@ Datasets used here
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 import ee
@@ -429,3 +430,118 @@ def fetch_farm_thumbnail_url(lat: float, lng: float, polygon: Optional[dict] = N
     except Exception:
         logger.exception("Farm thumbnail generation failed")
         return None
+
+
+# ---------------------------------------------------------------------------
+# Drought Instances (district-scale, since 2000) — years where annual
+# rainfall fell well below the long-term local average, from the same
+# CHIRPS dataset already used for the rainfall figures elsewhere.
+# ---------------------------------------------------------------------------
+
+def fetch_drought_instances(lat: float, lng: float, start_year: int = 2000, buffer_m: int = 25000) -> Dict[str, Any]:
+    """A 25 km buffer approximates 'district scale' since this app has no
+    administrative-boundary dataset loaded — a real district polygon
+    (from a shapefile/FeatureCollection) would be more precise if you
+    add one later.
+    """
+    region = _buffered_region(lat, lng, buffer_m)
+    end_year = datetime.utcnow().year
+
+    yearly_rainfall = []
+    for year in range(start_year, end_year):
+        coll = (
+            ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
+            .filterDate(f"{year}-01-01", f"{year}-12-31")
+            .filterBounds(region)
+        )
+        total = coll.sum()
+        val = _reduce_mean(total, region, scale=5000)
+        yearly_rainfall.append({"year": year, "rainfall_mm": val})
+
+    valid = [y["rainfall_mm"] for y in yearly_rainfall if y["rainfall_mm"] is not None]
+    if not valid:
+        return {"drought_years": [], "note": "Insufficient rainfall history for this location.", "source": "CHIRPS"}
+
+    mean_rainfall = sum(valid) / len(valid)
+    threshold = mean_rainfall * 0.75  # <75% of long-term local average = drought year, a common agromet convention
+
+    drought_years = [
+        y["year"] for y in yearly_rainfall
+        if y["rainfall_mm"] is not None and y["rainfall_mm"] < threshold
+    ]
+
+    return {
+        "drought_years": drought_years,
+        "long_term_avg_rainfall_mm": round(mean_rainfall, 1),
+        "threshold_mm": round(threshold, 1),
+        "note": "Years where total annual rainfall was <75% of the local long-term average (CHIRPS-derived, 25km scale) — an approximation, not an official drought declaration.",
+        "source": f"CHIRPS Daily, {start_year}-{end_year}",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Village Population — gridded population estimate (WorldPop), not an
+# exact Census figure but a real, current satellite-derived estimate.
+# ---------------------------------------------------------------------------
+
+def fetch_village_population(lat: float, lng: float, radius_m: int = 1500) -> Dict[str, Any]:
+    region = _buffered_region(lat, lng, radius_m)
+
+    try:
+        pop_img = ee.ImageCollection("WorldPop/GP/100m/pop").filterBounds(region).mosaic()
+        total = pop_img.reduceRegion(
+            reducer=ee.Reducer.sum(),
+            geometry=region,
+            scale=100,
+            maxPixels=1e9,
+        ).getInfo()
+        pop_estimate = total.get("population")
+    except Exception:
+        logger.exception("Population fetch failed")
+        return {"estimated_population": None, "source": "WorldPop"}
+
+    return {
+        "estimated_population": int(round(pop_estimate)) if pop_estimate is not None else None,
+        "radius_m": radius_m,
+        "note": "Gridded population estimate (WorldPop, ~100m resolution), not an exact Census figure.",
+        "source": "WorldPop Global Project",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Topography — elevation + slope from SRTM, classified into a simple
+# terrain description.
+# ---------------------------------------------------------------------------
+
+def fetch_topography(lat: float, lng: float, polygon: Optional[dict] = None) -> Dict[str, Any]:
+    region = _get_region(lat, lng, polygon)
+    dem = ee.Image("USGS/SRTMGL1_003").select("elevation")
+    slope = ee.Terrain.slope(dem)
+
+    stats = ee.Image.cat([dem, slope]).reduceRegion(
+        reducer=ee.Reducer.mean(),
+        geometry=region,
+        scale=30,
+        maxPixels=1e9,
+    ).getInfo()
+
+    elevation = stats.get("elevation")
+    slope_deg = stats.get("slope")
+
+    if slope_deg is None:
+        terrain = None
+    elif slope_deg < 2:
+        terrain = "Flat / plain"
+    elif slope_deg < 5:
+        terrain = "Gently sloping"
+    elif slope_deg < 15:
+        terrain = "Moderately sloping / undulating"
+    else:
+        terrain = "Hilly / steep"
+
+    return {
+        "elevation_m": round(elevation, 1) if elevation is not None else None,
+        "slope_degrees": round(slope_deg, 2) if slope_deg is not None else None,
+        "terrain": terrain,
+        "source": "SRTM 30m DEM",
+    }
