@@ -137,6 +137,11 @@ def _format_score_summary(result: Dict[str, Any]) -> str:
         if isinstance(top_crop, dict):
             lines.append(f"\n🌾 Recommended crop: {top_crop.get('crop', top_crop.get('name','—'))}")
 
+    yield_pred = result.get("yield_prediction")
+    if yield_pred:
+        total = f", ~{yield_pred['estimated_total_yield_quintal']} quintal on {yield_pred['area_ha']} ha" if yield_pred.get("estimated_total_yield_quintal") is not None else ""
+        lines.append(f"📦 Est. yield: {yield_pred['estimated_yield_kg_per_ha']} kg/ha{total} (formula estimate, not measured)")
+
     if climate.get("level"):
         lines.append(f"⚠️ Climate risk: {climate['level']}")
 
