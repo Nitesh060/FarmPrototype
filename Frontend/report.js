@@ -1,190 +1,103 @@
-/* ===================================================================
-   Extended Report page
-   Reads the exact result object index.html saved to sessionStorage
-   after a successful FarmScore calculation — never recomputes or
-   invents anything, just lays the same numbers out in more detail.
-   =================================================================== */
+<!DOCTYPE html>
+<html lang="en">
 
-const API_BASE_URL =
-    window.FARMSCORE_API_URL ||
-    "https://farmprototype.onrender.com";
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FarmScore — Extended Report</title>
 
-function row(icon, label, value) {
-    return `
-        <div class="enrichment-row">
-            <span class="er-icon">${icon}</span>
-            <span class="er-label">${label}</span>
-            <span class="er-value">${value}</span>
-        </div>`;
-}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css" />
+</head>
 
-function simpleBarChart(container, title, points, valueKey, labelKey, unit, color) {
-    const values = points.map(p => p[valueKey]).filter(v => v != null);
-    if (!values.length) {
-        container.innerHTML = `<p class="empty-hint">${title}: no data.</p>`;
-        return;
-    }
-    const max = Math.max(...values);
-    const avg = values.reduce((a, b) => a + b, 0) / values.length;
+<body>
 
-    container.innerHTML = `
-        <div class="sbc-title">${title} <span class="sbc-avg">avg ${avg.toFixed(1)}${unit}</span></div>
-        <div class="sbc-bars">
-            ${points.map(p => {
-                const v = p[valueKey];
-                const pct = v != null ? Math.max(4, (v / max) * 100) : 0;
-                return `
-                    <div class="sbc-bar-col">
-                        <div class="sbc-bar-track">
-                            <div class="sbc-bar-fill" style="height:${pct}%;background:${color}"></div>
-                        </div>
-                        <div class="sbc-bar-label">${p[labelKey]}</div>
-                        <div class="sbc-bar-value">${v != null ? v.toFixed(1) : "—"}</div>
-                    </div>`;
-            }).join("")}
-        </div>`;
-}
+<div class="app-shell">
 
-function renderFarmDetails(data) {
-    const list = document.getElementById("farm-details-list");
-    const coords = data.coordinates || {};
-    const enrichment = data.enrichment || {};
-    const irrigation = enrichment.irrigation || {};
-    const intensity = enrichment.cropping_intensity || {};
+    <!-- =============================== Sidebar =============================== -->
+    <aside class="side-nav">
 
-    list.innerHTML = [
-        row("📍", "Farm Centroid", `${coords.lat}° N, ${coords.lng}° E`),
-        row("🏞️", "Land Use Type", "Agricultural"),
-        row("💧", "Irrigation Condition", irrigation.likely_irrigated == null ? "—" : (irrigation.likely_irrigated ? "Irrigated" : "Not Irrigated")),
-        row("🌿", "Cropping Intensity", intensity.label || "—"),
-        row("📊", "FarmScore", `${data.score}/900 (${data.grade})`),
-    ].join("");
-}
+        <div class="nav-logo">
+            <div class="logo-mark">🌱</div>
+            <div>
+                <h1>FarmScore</h1>
+                <p>Smart Land. Strong Future.</p>
+            </div>
+        </div>
 
-function renderEnrichment(data) {
-    const list = document.getElementById("enrichment-list");
-    const e = data.enrichment || {};
-    const rows = [];
+        <nav class="nav-links">
+            <a class="nav-link" href="index.html"><span>🏠</span> Dashboard</a>
+            <a class="nav-link active" href="report.html"><span>📄</span> Extended Report</a>
+            <a class="nav-link" href="glossary.html"><span>📚</span> Glossary</a>
+        </nav>
 
-    if (e.soil_type && e.soil_type.label) rows.push(row("🪨", "Soil Type", e.soil_type.label));
-    if (e.agro_ecological_zone && e.agro_ecological_zone.zone) rows.push(row("🌍", "Agro-Ecological Zone", e.agro_ecological_zone.zone));
-    if (e.cropping_intensity && e.cropping_intensity.label) {
-        rows.push(row("🌿", "Cropping Intensity", `${e.cropping_intensity.label} (${e.cropping_intensity.estimated_cycles} cycle/yr est.)`));
-    }
-    if (e.irrigation && e.irrigation.likely_irrigated != null) {
-        rows.push(row("💧", "Irrigation Signal", e.irrigation.likely_irrigated ? "Likely irrigated" : "Likely rainfed"));
-    }
-    if (e.adjacent_land_cover && e.adjacent_land_cover.breakdown && e.adjacent_land_cover.breakdown.length) {
-        const top = e.adjacent_land_cover.breakdown.slice(0, 3).map(b => `${b.class} ${b.percent}%`).join(", ");
-        rows.push(row("🏞️", "Adjacent Land (1km ring)", top));
-    }
+        <div class="nav-footer-card">
+            <div class="nfc-title">Satellite-Powered Land Intelligence</div>
+            <p>Real Earth observation data for better farming and financing decisions.</p>
+        </div>
 
-    list.innerHTML = rows.length ? rows.join("") : `<p class="empty-hint">No enrichment data in this result.</p>`;
-}
+    </aside>
 
-function renderCroppingHistory(data) {
-    const wrap = document.getElementById("cropping-history-table");
-    const history = data.enrichment && data.enrichment.cropping_history;
-    if (!history || !history.years || !history.years.length) {
-        wrap.innerHTML = `<p class="empty-hint">No cropping history data in this result.</p>`;
-        return;
-    }
+    <!-- =============================== Main =============================== -->
+    <div class="main-col">
 
-    const rows = history.years.map(y => {
-        const k = y.kharif || {}, r = y.rabi || {};
-        return `
-            <tr>
-                <td>${y.year}</td>
-                <td>${k.ndvi != null ? k.ndvi : "—"}</td>
-                <td>${k.cropped ? "✅ Cropped" : "⚠️ Fallow/no signal"}</td>
-                <td>${r.ndvi != null ? r.ndvi : "—"}</td>
-                <td>${r.cropped ? "✅ Cropped" : "⚠️ Fallow/no signal"}</td>
-            </tr>`;
-    }).join("");
+        <header class="top-bar">
+            <div>
+                <h2 style="margin:0;font-size:1rem;">📄 Extended Farm Intelligence Report</h2>
+                <p class="panel-subtitle" id="report-subtitle" style="margin:2px 0 0;">No farm calculated yet</p>
+            </div>
+            <span class="topbar-spacer"></span>
+            <button id="download-pdf-btn-report" class="btn-detect" disabled>⬇️ Download PDF</button>
+        </header>
 
-    wrap.innerHTML = `
-        <table class="report-table">
-            <thead><tr><th>Year</th><th>Kharif NDVI</th><th>Kharif Status</th><th>Rabi NDVI</th><th>Rabi Status</th></tr></thead>
-            <tbody>${rows}</tbody>
-        </table>
-        <p class="empty-hint" style="margin-top:6px;">Season-level cropped/fallow signal from NDVI — not crop-species identification.</p>`;
-}
+        <div class="error-box" id="error-box"></div>
 
-function renderRegional(data) {
-    const list = document.getElementById("regional-list");
-    const e = data.enrichment || {};
-    const t = e.temperature_annual_range || {};
-    const prosperity = e.regional_prosperity || {};
-    const water = e.nearest_water_body || {};
+        <div id="report-empty-state" class="panel-card" style="margin:14px 0;">
+            <p class="empty-hint">
+                No farm data found. Go to <a href="index.html" style="color:var(--accent,#2f9e63);">Dashboard</a>,
+                pick a location and calculate a FarmScore first — this page reads that result.
+            </p>
+        </div>
 
-    const rows = [];
-    if (t.min_c != null) rows.push(row("🌡️", "Annual Temp Range", `${t.min_c}°C – ${t.max_c}°C (avg ${t.mean_c}°C)`));
-    if (water.water_present != null) rows.push(row("🌊", "Water Body (2km)", water.water_present ? "Present" : "Not detected"));
-    if (prosperity.tier) rows.push(row("📈", "Regional Prosperity (proxy)", prosperity.tier));
+        <div id="report-content" style="display:none;">
 
-    list.innerHTML = rows.length ? rows.join("") : `<p class="empty-hint">No regional data in this result.</p>`;
-}
+            <div class="panel-card" style="margin-bottom:14px;">
+                <div class="panel-title">🧾 Farm Details</div>
+                <div id="farm-details-list" class="enrichment-list"></div>
+            </div>
 
-function renderWaterCharts(data) {
-    const rainfallEl = document.getElementById("rainfall-chart");
-    const gwEl = document.getElementById("groundwater-chart");
-    simpleBarChart(rainfallEl, "🌧️ Rainfall (mm/day)", data.rainfall_monthly || [], "mm_per_day", "month", " mm/day", "#60a5fa");
-    simpleBarChart(gwEl, "💧 Groundwater Trend (kg/m²)", data.groundwater_trend || [], "groundwater", "year", " kg/m²", "#38bdf8");
-}
+            <div class="panel-card" style="margin-bottom:14px;">
+                <div class="panel-title">🧭 Soil, Land &amp; Cropping Intelligence</div>
+                <div id="enrichment-list" class="enrichment-list"></div>
+            </div>
 
-function init() {
-    let data = null;
-    try {
-        const raw = sessionStorage.getItem("farmscore_last_result");
-        if (raw) data = JSON.parse(raw);
-    } catch (err) {
-        console.warn("Could not read cached result:", err);
-    }
+            <div class="panel-card" style="margin-bottom:14px;">
+                <div class="panel-title">🌾 Cropping History (Satellite-derived, 3-year)</div>
+                <div id="cropping-history-table"></div>
+            </div>
 
-    if (!data) return;
+            <div class="panel-card" style="margin-bottom:14px;">
+                <div class="panel-title">💧 Water Conditions</div>
+                <div id="rainfall-chart" class="simple-bar-chart"></div>
+                <div id="groundwater-chart" class="simple-bar-chart" style="margin-top:14px;"></div>
+            </div>
 
-    document.getElementById("report-empty-state").style.display = "none";
-    document.getElementById("report-content").style.display = "block";
-    document.getElementById("report-subtitle").textContent =
-        `${data.coordinates.lat}° N, ${data.coordinates.lng}° E · Score ${data.score}/900 (${data.grade})`;
+            <div class="panel-card" style="margin-bottom:14px;">
+                <div class="panel-title">🌍 Regional Parameters</div>
+                <div id="regional-list" class="enrichment-list"></div>
+            </div>
 
-    renderFarmDetails(data);
-    renderEnrichment(data);
-    renderCroppingHistory(data);
-    renderWaterCharts(data);
-    renderRegional(data);
+        </div>
 
-    const btn = document.getElementById("download-pdf-btn-report");
-    btn.disabled = false;
-    btn.addEventListener("click", async function () {
-        const original = btn.textContent;
-        btn.textContent = "Generating…";
-        btn.disabled = true;
-        try {
-            const res = await fetch(`${API_BASE_URL}/report/pdf`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(data),
-            });
-            if (!res.ok) throw new Error("Report generation failed");
-            const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = "FarmScore_Report.pdf";
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            URL.revokeObjectURL(url);
-        } catch (err) {
-            const errBox = document.getElementById("error-box");
-            errBox.textContent = "Could not generate PDF report. Please try again.";
-            errBox.style.display = "block";
-        } finally {
-            btn.textContent = original;
-            btn.disabled = false;
-        }
-    });
-}
+        <footer class="app-footer">
+            <span>🛰️ Sentinel-2 · ESA WorldCover · OpenLandMap · JRC · VIIRS</span>
+            <span>Real satellite data — not AI-generated.</span>
+        </footer>
 
-init();
+    </div>
+</div>
+
+<script src="report.js"></script>
+</body>
+</html>
