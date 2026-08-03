@@ -106,3 +106,24 @@ def fetch_district_yield_comparison(crop: str, district: str, state: str, farm_y
         "no single national dataset covers all 8 of AFPL's RTS states consistently. "
         "See module docstring."
     )
+
+
+def fetch_major_crops_in_region(district: str, state: str) -> Dict[str, Any]:
+    """Season-wise crop area (Ha/%) and average yield (Kg/Ha) for a
+    district — the "Major Crops in the Region" table from the SatSource
+    sample. Sourced from Agriculture Census / District-level crop
+    statistics on data.gov.in.
+
+    Same caveat as fetch_district_yield_comparison: data.gov.in's
+    district-level crop statistics coverage varies by state and dataset
+    vintage — there's no single resource ID that reliably covers all
+    districts. Configure the resource ID for your operating states
+    before relying on this; this is a working template, not a drop-in.
+    """
+    if not DATA_GOV_IN_KEY:
+        return _unavailable("DATA_GOV_IN_KEY not set — get a free key at https://data.gov.in/")
+
+    return _unavailable(
+        "District crop-area/yield resource ID needs to be configured per state — "
+        "same data.gov.in coverage gap as district yield. See module docstring."
+    )
