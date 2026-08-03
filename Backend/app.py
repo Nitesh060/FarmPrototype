@@ -31,11 +31,15 @@ from enrichment_service import (
     fetch_nearest_water_body_signal,
     estimate_agro_ecological_zone,
     fetch_cropping_history,
+    fetch_drought_instances,
+    fetch_village_population,
+    fetch_topography,
 )
-from govt_data_service import fetch_mandi_price, fetch_district_yield_comparison
+from govt_data_service import fetch_mandi_price, fetch_district_yield_comparison, fetch_major_crops_in_region
 from glossary import GLOSSARY_TERMS
 from pdf_report import generate_pdf_report
 import whatsapp_service
+from yield_prediction import estimate_yield, compute_polygon_area_ha
 
 load_dotenv()
 
@@ -144,7 +148,7 @@ def compute_farmscore(lat: float, lng: float, polygon: Optional[dict] = None) ->
             logger.exception("Enrichment '%s' failed (non-fatal)", name)
             return name, None
 
-    with _TPE(max_workers=8) as pool:
+    with _TPE(max_workers=11) as pool:
         futures = [
             pool.submit(_safe, "soil_type", fetch_soil_type, lat, lng, polygon),
             pool.submit(_safe, "adjacent_land_cover", fetch_adjacent_land_cover, lat, lng, polygon),
@@ -154,6 +158,9 @@ def compute_farmscore(lat: float, lng: float, polygon: Optional[dict] = None) ->
             pool.submit(_safe, "regional_prosperity", fetch_prosperity_proxy, lat, lng, polygon),
             pool.submit(_safe, "nearest_water_body", fetch_nearest_water_body_signal, lat, lng, polygon),
             pool.submit(_safe, "cropping_history", fetch_cropping_history, lat, lng, polygon),
+            pool.submit(_safe, "topography", fetch_topography, lat, lng, polygon),
+            pool.submit(_safe, "village_population", fetch_village_population, lat, lng),
+            pool.submit(_safe, "drought_instances", fetch_drought_instances, lat, lng),
         ]
         for f in futures:
             key, val = f.result()
@@ -163,6 +170,18 @@ def compute_farmscore(lat: float, lng: float, polygon: Optional[dict] = None) ->
     enrichment["agro_ecological_zone"] = estimate_agro_ecological_zone(
         satellite_data.get("rainfall"), satellite_data.get("temperature")
     )
+
+    # ---- Yield Prediction (formula-based proxy, see yield_prediction.py) ----
+    # Uses the top-recommended crop + this farm's own NDVI. Area comes from
+    # the drawn polygon if one exists; without it, only per-hectare yield
+    # is estimated (no total tonnage).
+    try:
+        top_crop_name = crop_result["primary"]["crop"] if crop_result.get("primary") else None
+        area_ha = compute_polygon_area_ha(polygon) if polygon else None
+        yield_prediction = estimate_yield(top_crop_name, satellite_data.get("ndvi"), area_ha)
+    except Exception:
+        logger.exception("Yield prediction failed (non-fatal)")
+        yield_prediction = None
 
     response_payload = {
         "score": result["final_score"],
@@ -177,6 +196,7 @@ def compute_farmscore(lat: float, lng: float, polygon: Optional[dict] = None) ->
         "climate_risk": climate_risk,
         "coordinates": {"lat": lat, "lng": lng},
         "enrichment": enrichment,
+        "yield_prediction": yield_prediction,
         "elapsed_seconds": elapsed,
     }
 
@@ -431,6 +451,21 @@ def mandi_price():
         return jsonify({"error": "'commodity' and 'state' query params are required"}), 400
 
     result = fetch_mandi_price(commodity, state, district)
+    return jsonify(result), 200
+
+
+@app.route("/major-crops", methods=["GET"])
+def major_crops():
+    """Query params: district, state.
+    Requires DATA_GOV_IN_KEY to be configured — see govt_data_service.py.
+    """
+    district = request.args.get("district")
+    state = request.args.get("state")
+
+    if not district or not state:
+        return jsonify({"error": "'district' and 'state' query params are required"}), 400
+
+    result = fetch_major_crops_in_region(district, state)
     return jsonify(result), 200
 
 
