@@ -246,6 +246,7 @@ def _farm_details_section(data: Dict[str, Any], ss) -> list:
     cropping_intensity = enrichment.get("cropping_intensity") or {}
     soil = enrichment.get("soil_type") or {}
     aez = enrichment.get("agro_ecological_zone") or {}
+    yield_pred = data.get("yield_prediction")
 
     rows = [
         ["Farm Centroid", f"{coords.get('lat')}° N, {coords.get('lng')}° E"],
@@ -256,6 +257,10 @@ def _farm_details_section(data: Dict[str, Any], ss) -> list:
         ["Soil Type", soil.get("label", "—")],
         ["Agro-Ecological Zone", aez.get("zone", "—")],
     ]
+    if yield_pred:
+        total = f" (~{yield_pred['estimated_total_yield_quintal']} quintal on {yield_pred['area_ha']} ha)" if yield_pred.get("estimated_total_yield_quintal") is not None else ""
+        rows.append([f"Est. Yield ({yield_pred['crop']})", f"{yield_pred['estimated_yield_kg_per_ha']} kg/ha{total}"])
+
     t = Table(rows, colWidths=[50*mm, 100*mm])
     t.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (0, -1), LIGHT_GREY),
@@ -265,6 +270,10 @@ def _farm_details_section(data: Dict[str, Any], ss) -> list:
         ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
     ]))
     story.append(t)
+    if yield_pred:
+        story.append(Paragraph(
+            "Yield is a formula-based estimate (NDVI-proportional to national average yield) — not a trained ML prediction or a measured harvest.",
+            ss["Small"]))
     return story
 
 
@@ -336,6 +345,9 @@ def _regional_parameters_section(data: Dict[str, Any], ss) -> list:
     prosperity = enrichment.get("regional_prosperity") or {}
     water_body = enrichment.get("nearest_water_body") or {}
     land_cover = enrichment.get("adjacent_land_cover") or {}
+    topo = enrichment.get("topography") or {}
+    pop = enrichment.get("village_population") or {}
+    drought = enrichment.get("drought_instances") or {}
 
     top_land = ", ".join(f"{b['class']} {b['percent']}%" for b in (land_cover.get("breakdown") or [])[:3]) or "—"
 
@@ -345,6 +357,10 @@ def _regional_parameters_section(data: Dict[str, Any], ss) -> list:
         ["Water Body within 2 km", "Present" if water_body.get("water_present") else "Not detected"],
         ["Regional Prosperity (proxy)", prosperity.get("tier", "—")],
         ["Adjacent Land (top classes)", top_land],
+        ["Topography", f"{topo.get('terrain','—')} ({topo.get('elevation_m','—')}m, {topo.get('slope_degrees','—')}° slope)" if topo.get("terrain") else "—"],
+        ["Population (nearby, proxy)", f"~{pop.get('estimated_population'):,} within {pop.get('radius_m')}m" if pop.get("estimated_population") is not None else "—"],
+        ["Drought Years (district-scale, since 2000)",
+         ", ".join(str(y) for y in drought.get("drought_years", [])) or ("None detected" if drought.get("drought_years") is not None else "—")],
     ]
     t = Table(rows, colWidths=[55*mm, 95*mm])
     t.setStyle(TableStyle([
@@ -355,7 +371,8 @@ def _regional_parameters_section(data: Dict[str, Any], ss) -> list:
     ]))
     story.append(t)
     story.append(Paragraph(
-        "Regional Prosperity is a satellite-nightlight-based proxy, not an official government income index.",
+        "Regional Prosperity and Population are satellite-derived proxies, not official government indices/Census figures. "
+        "Drought years are approximated from CHIRPS rainfall (<75% of local long-term average), not an official drought declaration.",
         ss["Small"]))
     return story
 
