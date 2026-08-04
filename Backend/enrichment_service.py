@@ -545,3 +545,58 @@ def fetch_topography(lat: float, lng: float, polygon: Optional[dict] = None) -> 
         "terrain": terrain,
         "source": "SRTM 30m DEM",
     }
+
+
+# ---------------------------------------------------------------------------
+# NDVI Heatmap — a real per-pixel vegetation-health image (red→yellow→green),
+# clipped to the drawn farm boundary if one exists, for draping over the map
+# as a Leaflet image overlay. This is a genuine raster, not a single flat
+# tint — it shows the actual within-field variation the same way the rest
+# of this app's NDVI numbers are computed from.
+# ---------------------------------------------------------------------------
+
+NDVI_PALETTE = ["d73027", "f46d43", "fdae61", "fee08b", "d9ef8b", "a6d96a", "66bd63", "1a9850"]
+
+
+def fetch_ndvi_heatmap(lat: float, lng: float, polygon: Optional[dict] = None, buffer_m: int = 300) -> Optional[Dict[str, Any]]:
+    """Returns {"url": <PNG thumbnail URL>, "bounds": [[south,west],[north,east]]}
+    or None if generation fails. When a polygon is given, pixels outside it
+    are masked transparent so the heatmap follows the field's real shape
+    instead of a bounding box; without a polygon, falls back to a small
+    buffer circle around the point.
+    """
+    try:
+        if polygon:
+            coords = polygon.get("coordinates") if isinstance(polygon, dict) else polygon
+            geom = ee.Geometry.Polygon(coords)
+        else:
+            geom = _buffered_region(lat, lng, buffer_m)
+
+        bounds_coords = geom.bounds().getInfo()["coordinates"][0]
+        lons = [c[0] for c in bounds_coords]
+        lats = [c[1] for c in bounds_coords]
+        bounds = [[min(lats), min(lons)], [max(lats), max(lons)]]
+
+        collection = (
+            ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+            .filterBounds(geom)
+            .filterDate("2023-06-01", "2024-12-31")
+            .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 20))
+            .sort("CLOUDY_PIXEL_PERCENTAGE")
+        )
+        ndvi_img = collection.median().normalizedDifference(["B8", "B4"]).rename("NDVI")
+
+        if polygon:
+            ndvi_img = ndvi_img.clip(geom)
+
+        vis = ndvi_img.visualize(min=0.15, max=0.85, palette=NDVI_PALETTE)
+
+        url = vis.getThumbURL({
+            "region": geom.bounds(),
+            "dimensions": 640,
+            "format": "png",
+        })
+        return {"url": url, "bounds": bounds}
+    except Exception:
+        logger.exception("NDVI heatmap generation failed")
+        return None
