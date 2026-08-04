@@ -34,6 +34,7 @@ from enrichment_service import (
     fetch_drought_instances,
     fetch_village_population,
     fetch_topography,
+    fetch_ndvi_heatmap,
 )
 from govt_data_service import fetch_mandi_price, fetch_district_yield_comparison, fetch_major_crops_in_region
 from glossary import GLOSSARY_TERMS
@@ -431,6 +432,27 @@ def whatsapp_incoming():
     except Exception:
         logger.exception("WhatsApp webhook processing failed")
     return jsonify({"status": "ok"}), 200
+
+
+@app.route("/ndvi-heatmap", methods=["POST"])
+def ndvi_heatmap():
+    body = request.get_json(silent=True)
+    if not body:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    lat, lng, polygon = body.get("lat"), body.get("lng"), body.get("polygon")
+    if lat is None or lng is None:
+        return jsonify({"error": "Both 'lat' and 'lng' are required"}), 400
+
+    try:
+        lat, lng = float(lat), float(lng)
+    except (TypeError, ValueError):
+        return jsonify({"error": "'lat' and 'lng' must be numbers"}), 400
+
+    result = fetch_ndvi_heatmap(lat, lng, polygon)
+    if result is None:
+        return jsonify({"error": "Heatmap generation failed"}), 502
+    return jsonify(result), 200
 
 
 @app.route("/glossary", methods=["GET"])
