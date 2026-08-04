@@ -746,14 +746,32 @@ function renderResult(data) {
             </div>`;
     }).join("");
 
-    // ---- Tint the drawn polygon by real NDVI score (not a fake overlay) ----
+    // ---- NDVI Heatmap — real per-pixel vegetation image draped over the
+    // farm boundary, not a flat tint. Falls back to a flat tint if the
+    // heatmap image fails to generate (slow network, no imagery, etc). ----
     if (components.ndvi) {
         const col = ndviTintColor(components.ndvi.sub_score);
         drawnItems.eachLayer(function (layer) {
-            if (layer.setStyle) layer.setStyle({ fillColor: col, fillOpacity: 0.35, color: col });
+            if (layer.setStyle) layer.setStyle({ fillColor: col, fillOpacity: 0.15, color: col });
         });
         const legend = document.getElementById("ndvi-legend");
         if (legend) legend.style.display = "flex";
+
+        if (window.__ndviHeatmapLayer) {
+            map.removeLayer(window.__ndviHeatmapLayer);
+            window.__ndviHeatmapLayer = null;
+        }
+        fetch(`${API_BASE_URL}/ndvi-heatmap`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ lat: coordinates.lat, lng: coordinates.lng, polygon: farmPolygon }),
+        })
+            .then(res => res.ok ? res.json() : null)
+            .then(heatmap => {
+                if (!heatmap || !heatmap.url || !heatmap.bounds) return;
+                window.__ndviHeatmapLayer = L.imageOverlay(heatmap.url, heatmap.bounds, { opacity: 0.75 }).addTo(map);
+            })
+            .catch(err => console.warn("NDVI heatmap overlay failed (non-fatal):", err));
     }
 
     // ---- Top crop (folded into Land Summary — no separate crop card in this layout) ----
@@ -843,7 +861,7 @@ function renderResult(data) {
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
-            a.download = "FarmScore_Report.pdf";
+            a.download = "BhumiAI_Report.pdf";
             document.body.appendChild(a);
             a.click();
             a.remove();
@@ -896,7 +914,7 @@ async function computeScore() {
         errBox.style.display = "block";
     } finally {
         btn.classList.remove("loading");
-        btnText.textContent = "Calculate FarmScore";
+        btnText.textContent = "Calculate Bhumi AI Score";
     }
 }
 
