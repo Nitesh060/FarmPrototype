@@ -58,7 +58,7 @@ function renderFarmDetails(data) {
         row("🏞️", "Land Use Type", "Agricultural"),
         row("💧", "Irrigation Condition", irrigation.likely_irrigated == null ? "—" : (irrigation.likely_irrigated ? "Irrigated" : "Not Irrigated")),
         row("🌿", "Cropping Intensity", intensity.label || "—"),
-        row("📊", "FarmScore", `${data.score}/900 (${data.grade})`),
+        row("📊", "Bhumi AI Score", `${data.score}/900 (${data.grade})`),
     ];
 
     if (yieldPred) {
@@ -190,7 +190,7 @@ function init() {
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
-            a.download = "FarmScore_Report.pdf";
+            a.download = "BhumiAI_Report.pdf";
             document.body.appendChild(a);
             a.click();
             a.remove();
