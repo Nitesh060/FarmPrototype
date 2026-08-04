@@ -124,7 +124,7 @@ def _format_score_summary(result: Dict[str, Any]) -> str:
     climate = result.get("climate_risk", {})
 
     lines = [
-        f"🌱 *FarmScore: {score}/900 — {grade}*",
+        f"🌱 *Bhumi AI Score: {score}/900 — {grade}*",
         f"📍 {coords.get('lat')}° N, {coords.get('lng')}° E",
         "",
         "*Key factors:*",
@@ -174,12 +174,12 @@ def handle_incoming_message(payload: Dict[str, Any], compute_farmscore, generate
                 send_whatsapp_text(wa_id, "Couldn't read that location pin — please try sharing it again.")
                 return
 
-            send_whatsapp_text(wa_id, "📡 Calculating FarmScore from satellite data — this can take 20-40 seconds…")
+            send_whatsapp_text(wa_id, "📡 Calculating Bhumi AI Score from satellite data — this can take 20-40 seconds…")
             try:
                 result = compute_farmscore(float(lat), float(lng), None)
             except Exception:
                 logger.exception("compute_farmscore failed from WhatsApp")
-                send_whatsapp_text(wa_id, "Sorry, couldn't calculate FarmScore for that location right now. Please try again shortly.")
+                send_whatsapp_text(wa_id, "Sorry, couldn't calculate Bhumi AI Score for that location right now. Please try again shortly.")
                 return
 
             session["farm_context"] = result
